@@ -14,6 +14,9 @@
           src = ./.;
           cargoBuildFlags = "-p cli";
           cargoLock.lockFile = ./Cargo.lock;
+
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         };
 
         packages.default = self.packages.${system}.ggelo;
@@ -21,6 +24,8 @@
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.ggelo ];
           packages = [ pkgs.rust-analyzer ];
+
+          PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         };
     });
 }
