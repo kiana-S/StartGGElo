@@ -3,6 +3,9 @@ name = "cli"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "ggelo"
+path = "src/main.rs"
 
 [dependencies]
 schema.path = "../schema"
