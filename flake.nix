@@ -1,25 +1,34 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    crane.url = "github:ipetkov/crane";
+    crane.inputs = {
+      nixpkgs.follows = "nixpkgs";
+      flake-utils.follows = "flake-utils";
+    };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-utils, ... }:
+  outputs = { self, nixpkgs, crane, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = import nixpkgs { inherit system; };
+          craneLib = crane.lib.${system};
       in {
-        packages.ggelo = pkgs.rustPlatform.buildRustPackage {
+        packages.ggelo = craneLib.buildPackage {
           pname = "ggelo";
           version = "0.1.0";
           src = ./.;
           cargoBuildFlags = "-p cli";
-          cargoLock.lockFile = ./Cargo.lock;
 
           nativeBuildInputs = [ pkgs.pkg-config ];
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
+
+          doCheck = true;
         };
 
         packages.default = self.packages.${system}.ggelo;
+        checks.default = self.packages.${system}.ggelo;
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.ggelo ];
