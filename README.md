@@ -7,7 +7,7 @@ Once Elo ratings are generated, StartGGElo can be used to generate ranking lists
 probability of a player winning a match, generate seedings for future tournaments, and more.
 
 > **Note**
-> StartGGElo is still under development, and it currently only supports generating player ratings.
+> StartGGElo is still under development; currently, it only supports generating player ratings.
 
 ## Installation
 
@@ -21,6 +21,8 @@ StartGGElo stores its rating database in its config directory, which is located 
 - Mac/Linux: `~/.config/ggelo` or `~/.ggelo`
 
 This directory also contains StartGGElo's config file, which defines how it calculates its ratings.
+This file does not need to be edited directly, but it can be if you want to transfer your ratings between
+computers.
 
 ## Elo system basics
 
