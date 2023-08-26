@@ -6,7 +6,7 @@ generate and maintain [Elo ratings](https://wikipedia.org/wiki/Elo_rating_system
 Once Elo ratings are generated, StartGGElo can be used to generate ranking lists, predict the
 probability of a player winning a match, generate seedings for future tournaments, and more.
 
-[!NOTE]
+[!NOTE]<br>
 StartGGElo is still under development, and it currently only supports generating player ratings.
 
 ## Installation
