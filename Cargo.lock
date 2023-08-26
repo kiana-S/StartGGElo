@@ -300,7 +300,7 @@ version = "0.1.0"
 dependencies = [
  "cynic",
  "cynic-codegen",
- "scheme",
+ "schema",
  "surf",
 ]
 
@@ -1302,7 +1302,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scheme"
+name = "schema"
 version = "0.1.0"
 dependencies = [
  "cynic",
