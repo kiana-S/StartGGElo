@@ -27,6 +27,7 @@
           craneLib = crane.lib.${system}.overrideToolchain rustToolchain;
 
           commonArgs = {
+            pname = "ggelo";
             version = "0.1.0";
             src = craneLib.path ./.;
             cargoBuildFlags = "-p cli";
@@ -37,19 +38,15 @@
           # Cargo build dependencies/artifacts only
           # This derivation exists so that multiple builds can reuse
           # the same build artifacts
-          cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
-            pname = "ggelo-deps";
-          });
+          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
           # Run clippy (and deny all warnings) on the crate source
           runClippy = craneLib.cargoClippy (commonArgs // {
-            pname = "ggelo";
             cargoClippyExtraArgs = "--all-targets -- --deny warnings";
             inherit cargoArtifacts;
           });
 
           ggelo = craneLib.buildPackage (commonArgs // {
-            pname = "ggelo";
             inherit cargoArtifacts;
           });
       in {
