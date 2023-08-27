@@ -3,17 +3,28 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs = {
+      nixpkgs.follows = "nixpkgs";
+      flake-utils.follows = "flake-utils";
+    };
+
     crane.url = "github:ipetkov/crane";
     crane.inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-utils.follows = "flake-utils";
+      rust-overlay.follows = "rust-overlay";
     };
   };
 
-  outputs = { self, nixpkgs, crane, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, ... }:
     flake-utils.lib.eachDefaultSystem (system:
-      let pkgs = import nixpkgs { inherit system; };
-          craneLib = crane.lib.${system};
+      let pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
+          rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default);
+          craneLib = crane.lib.${system}.overrideToolchain rustToolchain;
 
           commonArgs = {
             version = "0.1.0";
@@ -32,7 +43,7 @@
 
           # Run clippy (and deny all warnings) on the crate source
           runClippy = craneLib.cargoClippy (commonArgs // {
-            pname = "ggelo-clippy-check";
+            pname = "ggelo";
             cargoClippyExtraArgs = "--all-targets -- --deny warnings";
             inherit cargoArtifacts;
           });
@@ -49,7 +60,7 @@
         checks.runClippy = runClippy;
 
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ rustc cargo pkg-config rust-analyzer ];
+          packages = with pkgs; [ rustToolchain pkg-config rust-analyzer ];
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         };
     });
