@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter};
-
 use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -19,18 +17,24 @@ pub struct ID(pub u64);
 #[derive(Debug, Copy, Clone)]
 pub struct VideogameId(pub u64);
 #[derive(Debug, Copy, Clone)]
-pub struct PlayerId(pub u64);
+pub struct EntrantId(pub u64);
 
 // Query machinery
 
 pub trait QueryUnwrap<Vars>: QueryBuilder<Vars> {
+    type VarsUnwrapped;
     type Unwrapped;
+
+    fn wrap_vars(vars: Self::VarsUnwrapped) -> Vars;
 
     fn unwrap_response(response: GraphQlResponse<Self>) -> Option<Self::Unwrapped>;
 }
 
 // Generic function for running start.gg queries
-pub async fn run_query<Builder: 'static, Vars>(vars: Vars, auth: &str) -> Option<Builder::Unwrapped>
+pub async fn run_query<Builder: 'static, Vars>(
+    vars: Builder::VarsUnwrapped,
+    auth: &str,
+) -> Option<Builder::Unwrapped>
 where
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
@@ -38,7 +42,7 @@ where
 {
     use cynic::http::SurfExt;
 
-    let query = Builder::build(vars);
+    let query = Builder::build(<Builder as QueryUnwrap<Vars>>::wrap_vars(vars));
 
     let response = surf::post("https://api.start.gg/gql/alpha")
         .header("Authorization", String::from("Bearer ") + auth)

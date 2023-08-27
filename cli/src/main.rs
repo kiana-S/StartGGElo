@@ -41,7 +41,7 @@ fn main() {
         .expect("Error reading from stdin");
 
     if let Some(response) = block_on(run_query::<VideogameSearch, _>(
-        VideogameSearchVars { name: search },
+        VideogameSearchVars { name: &search },
         &auth_key,
     )) {
         for game in response.into_iter() {
