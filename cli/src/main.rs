@@ -3,7 +3,8 @@ use std::path::Path;
 use futures::executor::block_on;
 
 mod queries;
-use queries::search_games::{VideogameSearch, VideogameSearchVars};
+use queries::*;
+use search_games::{VideogameSearch, VideogameSearchVars};
 
 
 fn get_auth_key(config_dir: &Path) -> Option<String> {
@@ -23,21 +24,6 @@ fn get_auth_key(config_dir: &Path) -> Option<String> {
     }
 }
 
-async fn run_query(name: &str, auth: &str) -> cynic::GraphQlResponse<VideogameSearch> {
-    use cynic::http::SurfExt;
-    use cynic::QueryBuilder;
-
-    let query = VideogameSearch::build(VideogameSearchVars {
-        name: String::from(name)
-    });
-
-    let response = surf::post("https://api.start.gg/gql/alpha")
-        .header("Authorization", String::from("Bearer ") + auth)
-        .run_graphql(query)
-        .await;
-
-    response.unwrap()
-}
 
 fn main() {
     let mut config_dir = dirs::config_dir().unwrap();
@@ -50,7 +36,8 @@ fn main() {
     let _ = io::stdout().flush();
     io::stdin().read_line(&mut search).expect("Error reading from stdin");
 
-    if let Some(response) = block_on(run_query(&search, &auth_key)).data {
+    if let Some(response) = block_on(
+            run_query::<VideogameSearch,_>(VideogameSearchVars { name: search }, &auth_key)).data {
         for maybe_game in response.videogames.unwrap().nodes.unwrap().into_iter() {
             let game = maybe_game.unwrap();
             println!("{:?} - {}", game.id.unwrap(), game.name.unwrap());
