@@ -1,3 +1,3 @@
 
 #[cynic::schema("startgg")]
-mod schema {}
+pub mod schema {}
