@@ -300,6 +300,8 @@ version = "0.1.0"
 dependencies = [
  "cynic",
  "cynic-codegen",
+ "dirs",
+ "futures",
  "schema",
  "surf",
 ]

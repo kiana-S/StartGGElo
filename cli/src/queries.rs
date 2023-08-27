@@ -1,2 +1,2 @@
 
-mod search_games;
+pub mod search_games;

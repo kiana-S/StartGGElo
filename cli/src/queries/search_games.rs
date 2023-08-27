@@ -5,7 +5,7 @@ use schema::schema;
 
 #[derive(cynic::QueryVariables)]
 pub struct VideogameSearchVars {
-    name: String
+    pub name: String
 }
 
 // QUERY
@@ -24,6 +24,6 @@ pub struct VideogameConnection {
 
 #[derive(cynic::QueryFragment, Debug)]
 pub struct Videogame {
-    pub id: Option<cynic::Id>,
+    pub id: Option<cynic::Id>
     pub name: Option<String>,
 }
