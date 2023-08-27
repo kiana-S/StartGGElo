@@ -25,17 +25,16 @@ pub struct Timestamp(pub u64);
 
 // Query machinery
 
-pub trait QueryUnwrap<Vars>: QueryBuilder<Vars> {
+pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
     type VarsUnwrapped;
     type Unwrapped;
 
     fn wrap_vars(vars: Self::VarsUnwrapped) -> Vars;
-
     fn unwrap_response(response: GraphQlResponse<Self>) -> Option<Self::Unwrapped>;
 }
 
 // Generic function for running start.gg queries
-pub async fn run_query<Builder: 'static, Vars>(
+pub async fn run_query<Builder, Vars>(
     vars: Builder::VarsUnwrapped,
     auth: &str,
 ) -> Option<Builder::Unwrapped>
@@ -46,12 +45,12 @@ where
 {
     use cynic::http::SurfExt;
 
-    let query = Builder::build(<Builder as QueryUnwrap<Vars>>::wrap_vars(vars));
+    let query = Builder::build(Builder::wrap_vars(vars));
 
     let response = surf::post("https://api.start.gg/gql/alpha")
         .header("Authorization", String::from("Bearer ") + auth)
         .run_graphql(query)
         .await;
 
-    <Builder as QueryUnwrap<Vars>>::unwrap_response(response.unwrap())
+    Builder::unwrap_response(response.unwrap())
 }
