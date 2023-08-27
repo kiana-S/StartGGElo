@@ -2,6 +2,7 @@ use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
 
 pub mod search_games;
+pub mod tournament_sets;
 
 use schema::schema;
 
@@ -18,6 +19,9 @@ pub struct ID(pub u64);
 pub struct VideogameId(pub u64);
 #[derive(Debug, Copy, Clone)]
 pub struct EntrantId(pub u64);
+
+#[derive(cynic::Scalar, Debug, Clone)]
+pub struct Timestamp(pub u64);
 
 // Query machinery
 
