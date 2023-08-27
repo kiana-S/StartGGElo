@@ -31,9 +31,7 @@
         checks.default = self.packages.${system}.ggelo;
 
         devShells.default = pkgs.mkShell {
-          inputsFrom = [ self.packages.${system}.ggelo ];
-          packages = [ pkgs.rust-analyzer ];
-
+          packages = with pkgs; [ rustc cargo pkg-config rust-analyzer ];
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         };
     });
