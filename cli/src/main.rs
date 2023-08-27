@@ -8,6 +8,7 @@ mod queries;
 use queries::*;
 use search_games::{VideogameSearch, VideogameSearchVars};
 
+mod datasets;
 
 fn get_auth_key(config_dir: &Path) -> Option<String> {
     use std::env::{var, VarError};
