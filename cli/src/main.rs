@@ -1,6 +1,8 @@
+#![feature(iterator_try_collect)]
+
+use futures::executor::block_on;
 use std::io::{self, Write};
 use std::path::Path;
-use futures::executor::block_on;
 
 mod queries;
 use queries::*;
@@ -24,7 +26,6 @@ fn get_auth_key(config_dir: &Path) -> Option<String> {
     }
 }
 
-
 fn main() {
     let mut config_dir = dirs::config_dir().unwrap();
     config_dir.push("ggelo");
@@ -34,13 +35,16 @@ fn main() {
     let mut search = String::new();
     print!("Search for game: ");
     let _ = io::stdout().flush();
-    io::stdin().read_line(&mut search).expect("Error reading from stdin");
+    io::stdin()
+        .read_line(&mut search)
+        .expect("Error reading from stdin");
 
-    if let Some(response) = block_on(
-            run_query::<VideogameSearch,_>(VideogameSearchVars { name: search }, &auth_key)).data {
-        for maybe_game in response.videogames.unwrap().nodes.unwrap().into_iter() {
-            let game = maybe_game.unwrap();
-            println!("{:?} - {}", game.id.unwrap(), game.name.unwrap());
+    if let Some(response) = block_on(run_query::<VideogameSearch, _>(
+        VideogameSearchVars { name: search },
+        &auth_key,
+    )) {
+        for game in response.into_iter() {
+            println!("{} - {}", game.id, game.name);
         }
     } else {
         println!("No response");
