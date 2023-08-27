@@ -1,5 +1,6 @@
 
 use schema::schema;
+use super::ID;
 
 // VARIABLES
 
@@ -24,6 +25,6 @@ pub struct VideogameConnection {
 
 #[derive(cynic::QueryFragment, Debug)]
 pub struct Videogame {
-    pub id: Option<cynic::Id>
+    pub id: Option<ID>,
     pub name: Option<String>,
 }
