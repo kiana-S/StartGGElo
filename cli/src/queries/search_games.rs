@@ -1,4 +1,4 @@
-use super::{QueryUnwrap, ID};
+use super::{QueryUnwrap, VideogameId, ID};
 use cynic::GraphQlResponse;
 use schema::schema;
 
@@ -32,7 +32,7 @@ pub struct Videogame {
 // Unwrapping
 
 pub struct VideogameResponse {
-    pub id: ID,
+    pub id: VideogameId,
     pub name: String,
 }
 
@@ -51,7 +51,7 @@ impl QueryUnwrap<VideogameSearchVars> for VideogameSearch {
                 .map(|game| {
                     let game_ = game?;
                     Some(VideogameResponse {
-                        id: game_.id?,
+                        id: VideogameId(game_.id?.0),
                         name: game_.name?,
                     })
                 })

@@ -45,7 +45,7 @@ fn main() {
         &auth_key,
     )) {
         for game in response.into_iter() {
-            println!("{} - {}", game.id, game.name);
+            println!("{} - {}", game.id.0, game.name);
         }
     } else {
         println!("No response");

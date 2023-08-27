@@ -7,17 +7,21 @@ pub mod search_games;
 
 use schema::schema;
 
+// Types
+
 // HACK: Unfortunately, start.gg seems to use integers for its ID type, whereas
 // cynic always assumes that IDs are strings. To get around that, we define a
 // new scalar type that serializes to u64.
 #[derive(cynic::Scalar, Debug, Copy, Clone)]
 pub struct ID(pub u64);
 
-impl Display for ID {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        <u64 as Display>::fmt(&self.0, f)
-    }
-}
+// Wrapper types to differentiate between different types of IDs
+#[derive(Debug, Copy, Clone)]
+pub struct VideogameId(pub u64);
+#[derive(Debug, Copy, Clone)]
+pub struct PlayerId(pub u64);
+
+// Query machinery
 
 pub trait QueryUnwrap<Vars>: QueryBuilder<Vars> {
     type Unwrapped;
