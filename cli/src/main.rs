@@ -1,5 +1,9 @@
 use std::env;
 
+mod queries;
+use queries::*;
+
+
 fn get_auth_key() -> Option<String> {
     env::var("AUTH_KEY").ok()
 }
