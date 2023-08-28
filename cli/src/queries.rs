@@ -2,7 +2,9 @@ use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
 
 pub mod search_games;
+pub use search_games::*;
 pub mod tournament_sets;
+pub use tournament_sets::*;
 
 use schema::schema;
 

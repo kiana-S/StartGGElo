@@ -6,7 +6,6 @@ use std::path::Path;
 
 mod queries;
 use queries::*;
-use search_games::{VideogameSearch, VideogameSearchVars};
 
 mod datasets;
 
@@ -20,9 +19,14 @@ fn get_auth_key(config_dir: &Path) -> Option<String> {
         Err(VarError::NotPresent) => {
             let mut auth_file = config_dir.to_owned();
             auth_file.push("auth.txt");
-            read_to_string(auth_file)
-                .ok()
-                .and_then(|s| s.split_whitespace().next().map(String::from))
+            read_to_string(auth_file).ok().and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_owned())
+                }
+            })
         }
     }
 }
@@ -32,22 +36,30 @@ fn main() {
     config_dir.push("ggelo");
     let auth_key = get_auth_key(&config_dir).expect("Could not find authorization key");
 
-    // Get search prompt
-    let mut search = String::new();
-    print!("Search for game: ");
-    let _ = io::stdout().flush();
-    io::stdin()
-        .read_line(&mut search)
-        .expect("Error reading from stdin");
-
-    if let Some(response) = block_on(run_query::<VideogameSearch, _>(
-        VideogameSearchVars { name: &search },
+    if let Some(response) = block_on(run_query::<TournamentSets, _>(
+        TournamentSetsVars {
+            last_query: None,
+            game_id: VideogameId(1386),
+            country: None,
+            state: Some("GA"),
+        },
         &auth_key,
     )) {
-        for game in response.into_iter() {
-            println!("{} - {}", game.id.0, game.name);
+        println!("Succeeded");
+        for tournament in response {
+            println!("Tournament: {}", tournament.name);
+            for set in tournament.sets {
+                println!(
+                    "Winner: {}",
+                    if set.winner {
+                        set.player2.0
+                    } else {
+                        set.player1.0
+                    }
+                );
+            }
         }
     } else {
-        println!("No response");
+        println!("Invalid GraphQL response");
     }
 }
