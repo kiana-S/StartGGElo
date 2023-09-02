@@ -8,6 +8,7 @@ use schema::schema;
 pub struct TournamentSetsVars<'a> {
     // HACK: This should really be an optional variable, but there seems to be a
     // server-side bug that completely breaks everything when this isn't passed.
+    // We can use a dummy value of 1 when we don't want to filter by time.
     pub last_query: Timestamp,
 
     pub game_id: VideogameId,
@@ -31,65 +32,65 @@ pub struct TournamentSets {
             countryCode: $country,
             addrState: $state
         }})]
-    pub tournaments: Option<TournamentConnection>,
+    tournaments: Option<TournamentConnection>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentSetsVars")]
-pub struct TournamentConnection {
+struct TournamentConnection {
     #[cynic(flatten)]
-    pub nodes: Vec<Tournament>,
+    nodes: Vec<Tournament>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentSetsVars")]
-pub struct Tournament {
-    pub name: Option<String>,
+struct Tournament {
+    name: Option<String>,
     #[arguments(limit: 99999, filter: { videogameId: [$game_id] })]
     #[cynic(flatten)]
-    pub events: Vec<Event>,
+    events: Vec<Event>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct Event {
+struct Event {
     #[arguments(page: 1, perPage: 999)]
-    pub sets: Option<SetConnection>,
+    sets: Option<SetConnection>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct SetConnection {
+struct SetConnection {
     #[cynic(flatten)]
-    pub nodes: Vec<Set>,
+    nodes: Vec<Set>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct Set {
+struct Set {
     #[arguments(includeByes: true)]
     #[cynic(flatten)]
-    pub slots: Vec<SetSlot>,
-    pub winner_id: Option<i32>,
+    slots: Vec<SetSlot>,
+    winner_id: Option<i32>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct SetSlot {
-    pub entrant: Option<Entrant>,
+struct SetSlot {
+    entrant: Option<Entrant>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct Entrant {
-    pub id: Option<EntrantId>,
+struct Entrant {
+    id: Option<EntrantId>,
     #[cynic(flatten)]
-    pub participants: Vec<Participant>,
+    participants: Vec<Participant>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct Participant {
-    pub player: Option<Player>,
+struct Participant {
+    player: Option<Player>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct Player {
-    pub id: Option<PlayerId>,
+struct Player {
+    id: Option<PlayerId>,
 }
 
 // Unwrap
