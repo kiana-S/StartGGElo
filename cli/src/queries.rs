@@ -36,7 +36,7 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 }
 
 // Generic function for running start.gg queries
-pub async fn run_query<Builder, Vars>(
+pub fn run_query<Builder, Vars>(
     vars: Builder::VarsUnwrapped,
     auth: &str,
 ) -> Option<Builder::Unwrapped>
@@ -45,14 +45,14 @@ where
     Vars: Serialize,
     for<'de> Builder: Deserialize<'de>,
 {
-    use cynic::http::SurfExt;
+    use cynic::http::ReqwestBlockingExt;
 
     let query = Builder::build(Builder::wrap_vars(vars));
 
-    let response = surf::post("https://api.start.gg/gql/alpha")
+    let response = reqwest::blocking::Client::new()
+        .post("https://api.start.gg/gql/alpha")
         .header("Authorization", String::from("Bearer ") + auth)
-        .run_graphql(query)
-        .await;
+        .run_graphql(query);
 
     Builder::unwrap_response(response.unwrap())
 }

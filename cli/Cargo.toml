@@ -8,12 +8,16 @@ name = "ggelo"
 path = "src/main.rs"
 
 [dependencies]
+# GraphQL schema
 schema.path = "../schema"
-cynic = { version = "3.2", features = ["http-surf"] }
-surf = "2"
-dirs = "5.0"
-futures = "0.3"
+
+# API access
+cynic = { version = "3.2", features = ["http-reqwest-blocking"] }
+reqwest = "0.11"
 serde = "1.0"
+
+# Local file manipulation
+dirs = "5.0"
 sqlite = "0.31"
 
 [build-dependencies]

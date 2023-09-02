@@ -1,7 +1,5 @@
 #![feature(iterator_try_collect)]
 
-use futures::executor::block_on;
-use std::io::{self, Write};
 use std::path::Path;
 
 mod queries;
@@ -36,7 +34,7 @@ fn main() {
     config_dir.push("ggelo");
     let auth_key = get_auth_key(&config_dir).expect("Could not find authorization key");
 
-    if let Some(response) = block_on(run_query::<TournamentSets, _>(
+    if let Some(response) = run_query::<TournamentSets, _>(
         TournamentSetsVars {
             last_query: None,
             game_id: VideogameId(1386),
@@ -44,7 +42,7 @@ fn main() {
             state: Some("GA"),
         },
         &auth_key,
-    )) {
+    ) {
         println!("Succeeded");
         for tournament in response {
             println!("Tournament: {}", tournament.name);
