@@ -36,7 +36,7 @@ fn main() {
 
     if let Some(response) = run_query::<TournamentSets, _>(
         TournamentSetsVars {
-            last_query: None,
+            last_query: Timestamp(1),
             game_id: VideogameId(1386),
             country: None,
             state: Some("GA"),

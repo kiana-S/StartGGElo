@@ -6,9 +6,12 @@ use schema::schema;
 
 #[derive(cynic::QueryVariables, Debug)]
 pub struct TournamentSetsVarsRaw<'a> {
+    // HACK: This should really be an optional variable, but there seems to be a
+    // server-side bug that completely breaks everything when this isn't passed.
+    last_query: Timestamp,
+
     country: Option<&'a str>,
     game_id: ID,
-    last_query: Option<Timestamp>,
     state: Option<&'a str>,
 }
 
@@ -76,9 +79,9 @@ struct Entrant {
 // Unwrap
 
 pub struct TournamentSetsVars<'a> {
-    pub country: Option<&'a str>,
+    pub last_query: Timestamp,
     pub game_id: VideogameId,
-    pub last_query: Option<Timestamp>,
+    pub country: Option<&'a str>,
     pub state: Option<&'a str>,
 }
 
@@ -99,16 +102,16 @@ impl<'a> QueryUnwrap<TournamentSetsVarsRaw<'a>> for TournamentSets {
 
     fn wrap_vars(
         TournamentSetsVars {
-            country,
-            game_id: VideogameId(game_id),
             last_query,
+            game_id: VideogameId(game_id),
+            country,
             state,
         }: TournamentSetsVars,
     ) -> TournamentSetsVarsRaw {
         TournamentSetsVarsRaw {
-            country,
-            game_id: ID(game_id),
             last_query,
+            game_id: ID(game_id),
+            country,
             state,
         }
     }
