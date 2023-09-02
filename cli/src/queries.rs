@@ -23,6 +23,10 @@ pub struct VideogameId(pub u64);
 #[cynic(graphql_type = "ID")]
 pub struct EntrantId(pub u64);
 
+#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[cynic(graphql_type = "ID")]
+pub struct PlayerId(pub u64);
+
 #[derive(cynic::Scalar, Debug, Clone)]
 pub struct Timestamp(pub u64);
 

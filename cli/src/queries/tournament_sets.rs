@@ -1,4 +1,4 @@
-use super::{EntrantId, QueryUnwrap, Timestamp, VideogameId};
+use super::{EntrantId, PlayerId, QueryUnwrap, Timestamp, VideogameId};
 use cynic::GraphQlResponse;
 use schema::schema;
 
@@ -10,8 +10,8 @@ pub struct TournamentSetsVars<'a> {
     // server-side bug that completely breaks everything when this isn't passed.
     pub last_query: Timestamp,
 
-    pub country: Option<&'a str>,
     pub game_id: VideogameId,
+    pub country: Option<&'a str>,
     pub state: Option<&'a str>,
 }
 
@@ -27,57 +27,69 @@ pub struct TournamentSets {
         filter: {
             past: true,
             afterDate: $last_query,
-            addrState: $state,
+            videogameIds: [$game_id],
             countryCode: $country,
-            videogameIds: [$game_id]
+            addrState: $state
         }})]
-    tournaments: Option<TournamentConnection>,
+    pub tournaments: Option<TournamentConnection>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentSetsVars")]
-struct TournamentConnection {
+pub struct TournamentConnection {
     #[cynic(flatten)]
-    nodes: Vec<Tournament>,
+    pub nodes: Vec<Tournament>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentSetsVars")]
-struct Tournament {
-    name: Option<String>,
-    #[arguments(limit: 1000, filter: { videogameId: [$game_id] })]
+pub struct Tournament {
+    pub name: Option<String>,
+    #[arguments(limit: 99999, filter: { videogameId: [$game_id] })]
     #[cynic(flatten)]
-    events: Vec<Event>,
+    pub events: Vec<Event>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-struct Event {
+pub struct Event {
     #[arguments(page: 1, perPage: 999)]
-    sets: Option<SetConnection>,
+    pub sets: Option<SetConnection>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-struct SetConnection {
+pub struct SetConnection {
     #[cynic(flatten)]
-    nodes: Vec<Set>,
+    pub nodes: Vec<Set>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-struct Set {
+pub struct Set {
     #[arguments(includeByes: true)]
     #[cynic(flatten)]
-    slots: Vec<SetSlot>,
-    winner_id: Option<i32>,
+    pub slots: Vec<SetSlot>,
+    pub winner_id: Option<i32>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-struct SetSlot {
-    entrant: Option<Entrant>,
+pub struct SetSlot {
+    pub entrant: Option<Entrant>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-struct Entrant {
-    id: Option<EntrantId>,
+pub struct Entrant {
+    pub id: Option<EntrantId>,
+    #[cynic(flatten)]
+    pub participants: Vec<Participant>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+pub struct Participant {
+    pub player: Option<Player>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+pub struct Player {
+    pub id: Option<PlayerId>,
 }
 
 // Unwrap
@@ -88,9 +100,8 @@ pub struct TournamentResponse {
 }
 
 pub struct SetResponse {
-    pub player1: EntrantId,
-    pub player2: EntrantId,
-    pub winner: bool,
+    pub teams: Vec<Vec<PlayerId>>,
+    pub winner: usize,
 }
 
 impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
@@ -122,15 +133,28 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                                     .nodes
                                     .into_iter()
                                     .filter_map(|set| {
-                                        let slots = set.slots;
-                                        let player1 = (&slots[0]).entrant.as_ref()?.id?;
-                                        let player2 = (&slots[0]).entrant.as_ref()?.id?;
-                                        let winner = set.winner_id? as u64;
-                                        Some(SetResponse {
-                                            player1,
-                                            player2,
-                                            winner: winner == player2.0,
-                                        })
+                                        let winner_id = set.winner_id?;
+                                        let winner = set.slots.iter().position(|slot| {
+                                            slot.entrant
+                                                .as_ref()
+                                                .and_then(|x| x.id)
+                                                .map(|id| id.0 == winner_id as u64)
+                                                .unwrap_or(false)
+                                        })?;
+                                        let teams = set
+                                            .slots
+                                            .into_iter()
+                                            .filter_map(|slot| {
+                                                Some(
+                                                    slot.entrant?
+                                                        .participants
+                                                        .into_iter()
+                                                        .filter_map(|p| Some(p.player?.id?))
+                                                        .collect(),
+                                                )
+                                            })
+                                            .collect();
+                                        Some(SetResponse { teams, winner })
                                     })
                                     .collect::<Vec<_>>(),
                             )
