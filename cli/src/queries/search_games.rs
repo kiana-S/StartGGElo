@@ -20,7 +20,8 @@ pub struct VideogameSearch {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct VideogameConnection {
-    nodes: Option<Vec<Option<Videogame>>>,
+    #[cynic(flatten)]
+    nodes: Vec<Videogame>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -51,13 +52,12 @@ impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
             response
                 .data?
                 .videogames?
-                .nodes?
+                .nodes
                 .into_iter()
                 .filter_map(|game| {
-                    let game_ = game?;
                     Some(VideogameResponse {
-                        id: game_.id?,
-                        name: game_.name?,
+                        id: game.id?,
+                        name: game.name?,
                     })
                 })
                 .collect(),

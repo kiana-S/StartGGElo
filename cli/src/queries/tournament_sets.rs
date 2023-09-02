@@ -37,7 +37,8 @@ pub struct TournamentSets {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentSetsVars")]
 struct TournamentConnection {
-    nodes: Option<Vec<Option<Tournament>>>,
+    #[cynic(flatten)]
+    nodes: Vec<Tournament>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -45,7 +46,8 @@ struct TournamentConnection {
 struct Tournament {
     name: Option<String>,
     #[arguments(limit: 1000, filter: { videogameId: [$game_id] })]
-    events: Option<Vec<Option<Event>>>,
+    #[cynic(flatten)]
+    events: Vec<Event>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -56,13 +58,15 @@ struct Event {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct SetConnection {
-    nodes: Option<Vec<Option<Set>>>,
+    #[cynic(flatten)]
+    nodes: Vec<Set>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Set {
     #[arguments(includeByes: true)]
-    slots: Option<Vec<Option<SetSlot>>>,
+    #[cynic(flatten)]
+    slots: Vec<SetSlot>,
     winner_id: Option<i32>,
 }
 
@@ -105,26 +109,23 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
             response
                 .data?
                 .tournaments?
-                .nodes?
+                .nodes
                 .into_iter()
                 .filter_map(|tour| {
-                    let tour_ = tour?;
-                    let sets = tour_
-                        .events?
+                    let sets = tour
+                        .events
                         .into_iter()
                         .filter_map(|event| {
-                            let event_ = event?;
                             Some(
-                                event_
+                                event
                                     .sets?
-                                    .nodes?
+                                    .nodes
                                     .into_iter()
                                     .filter_map(|set| {
-                                        let set_ = set?;
-                                        let slots = set_.slots?;
-                                        let player1 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?;
-                                        let player2 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?;
-                                        let winner = set_.winner_id? as u64;
+                                        let slots = set.slots;
+                                        let player1 = (&slots[0]).entrant.as_ref()?.id?;
+                                        let player2 = (&slots[0]).entrant.as_ref()?.id?;
+                                        let winner = set.winner_id? as u64;
                                         Some(SetResponse {
                                             player1,
                                             player2,
@@ -137,7 +138,7 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                         .flatten()
                         .collect();
                     Some(TournamentResponse {
-                        name: tour_.name?,
+                        name: tour.name?,
                         sets,
                     })
                 })
