@@ -1,5 +1,6 @@
 use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 pub mod search_games;
 pub use search_games::*;
@@ -24,6 +25,30 @@ pub struct EntrantId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Clone)]
 pub struct Timestamp(pub u64);
+
+// Auth key
+
+pub fn get_auth_key(config_dir: &Path) -> Option<String> {
+    use std::env::{var, VarError};
+    use std::fs::read_to_string;
+
+    match var("AUTH_KEY") {
+        Ok(key) => Some(key),
+        Err(VarError::NotUnicode(_)) => panic!("Invalid authorization key"),
+        Err(VarError::NotPresent) => {
+            let mut auth_file = config_dir.to_owned();
+            auth_file.push("auth.txt");
+            read_to_string(auth_file).ok().and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_owned())
+                }
+            })
+        }
+    }
+}
 
 // Query machinery
 
