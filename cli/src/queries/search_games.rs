@@ -1,4 +1,4 @@
-use super::{QueryUnwrap, VideogameId, ID};
+use super::{QueryUnwrap, VideogameId};
 use cynic::GraphQlResponse;
 use schema::schema;
 
@@ -25,7 +25,7 @@ struct VideogameConnection {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Videogame {
-    id: Option<ID>,
+    id: Option<VideogameId>,
     name: Option<String>,
 }
 
@@ -56,7 +56,7 @@ impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
                 .filter_map(|game| {
                     let game_ = game?;
                     Some(VideogameResponse {
-                        id: VideogameId(game_.id?.0),
+                        id: game_.id?,
                         name: game_.name?,
                     })
                 })

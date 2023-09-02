@@ -1,24 +1,24 @@
-use super::{EntrantId, QueryUnwrap, Timestamp, VideogameId, ID};
+use super::{EntrantId, QueryUnwrap, Timestamp, VideogameId};
 use cynic::GraphQlResponse;
 use schema::schema;
 
 // Variables
 
 #[derive(cynic::QueryVariables, Debug)]
-pub struct TournamentSetsVarsRaw<'a> {
+pub struct TournamentSetsVars<'a> {
     // HACK: This should really be an optional variable, but there seems to be a
     // server-side bug that completely breaks everything when this isn't passed.
-    last_query: Timestamp,
+    pub last_query: Timestamp,
 
-    country: Option<&'a str>,
-    game_id: ID,
-    state: Option<&'a str>,
+    pub country: Option<&'a str>,
+    pub game_id: VideogameId,
+    pub state: Option<&'a str>,
 }
 
 // Query
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Query", variables = "TournamentSetsVarsRaw")]
+#[cynic(graphql_type = "Query", variables = "TournamentSetsVars")]
 pub struct TournamentSets {
     #[arguments(query: {
         page: 1,
@@ -35,13 +35,13 @@ pub struct TournamentSets {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(variables = "TournamentSetsVarsRaw")]
+#[cynic(variables = "TournamentSetsVars")]
 struct TournamentConnection {
     nodes: Option<Vec<Option<Tournament>>>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(variables = "TournamentSetsVarsRaw")]
+#[cynic(variables = "TournamentSetsVars")]
 struct Tournament {
     name: Option<String>,
     #[arguments(limit: 1000, filter: { videogameId: [$game_id] })]
@@ -73,17 +73,10 @@ struct SetSlot {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Entrant {
-    id: Option<ID>,
+    id: Option<EntrantId>,
 }
 
 // Unwrap
-
-pub struct TournamentSetsVars<'a> {
-    pub last_query: Timestamp,
-    pub game_id: VideogameId,
-    pub country: Option<&'a str>,
-    pub state: Option<&'a str>,
-}
 
 pub struct TournamentResponse {
     pub name: String,
@@ -96,24 +89,12 @@ pub struct SetResponse {
     pub winner: bool,
 }
 
-impl<'a> QueryUnwrap<TournamentSetsVarsRaw<'a>> for TournamentSets {
+impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
     type VarsUnwrapped = TournamentSetsVars<'a>;
     type Unwrapped = Vec<TournamentResponse>;
 
-    fn wrap_vars(
-        TournamentSetsVars {
-            last_query,
-            game_id: VideogameId(game_id),
-            country,
-            state,
-        }: TournamentSetsVars,
-    ) -> TournamentSetsVarsRaw {
-        TournamentSetsVarsRaw {
-            last_query,
-            game_id: ID(game_id),
-            country,
-            state,
-        }
+    fn wrap_vars(vars: TournamentSetsVars) -> TournamentSetsVars {
+        vars
     }
 
     // This might be the most spaghetti code I've ever written
@@ -141,13 +122,13 @@ impl<'a> QueryUnwrap<TournamentSetsVarsRaw<'a>> for TournamentSets {
                                     .filter_map(|set| {
                                         let set_ = set?;
                                         let slots = set_.slots?;
-                                        let player1 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?.0;
-                                        let player2 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?.0;
+                                        let player1 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?;
+                                        let player2 = (&slots[0]).as_ref()?.entrant.as_ref()?.id?;
                                         let winner = set_.winner_id? as u64;
                                         Some(SetResponse {
-                                            player1: EntrantId(player1),
-                                            player2: EntrantId(player2),
-                                            winner: winner == player2,
+                                            player1,
+                                            player2,
+                                            winner: winner == player2.0,
                                         })
                                     })
                                     .collect::<Vec<_>>(),

@@ -12,15 +12,15 @@ use schema::schema;
 // Types
 
 // HACK: Unfortunately, start.gg seems to use integers for its ID type, whereas
-// cynic always assumes that IDs are strings. To get around that, we define a
-// new scalar type that serializes to u64.
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
-pub struct ID(pub u64);
+// cynic always assumes that IDs are strings. To get around that, we define new
+// scalar types that deserialize to u64.
 
-// Wrapper types to differentiate between different types of IDs
-#[derive(Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[cynic(graphql_type = "ID")]
 pub struct VideogameId(pub u64);
-#[derive(Debug, Copy, Clone)]
+
+#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[cynic(graphql_type = "ID")]
 pub struct EntrantId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Clone)]
