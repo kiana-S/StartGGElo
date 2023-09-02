@@ -23,7 +23,7 @@ pub struct TournamentSets {
     #[arguments(query: {
         page: 1,
         perPage: 1,
-        sortBy: "startAt desc",
+        sortBy: "endAt desc",
         filter: {
             past: true,
             afterDate: $last_query,
@@ -144,16 +144,14 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                                         let teams = set
                                             .slots
                                             .into_iter()
-                                            .filter_map(|slot| {
-                                                Some(
-                                                    slot.entrant?
-                                                        .participants
-                                                        .into_iter()
-                                                        .filter_map(|p| Some(p.player?.id?))
-                                                        .collect(),
-                                                )
+                                            .map(|slot| {
+                                                slot.entrant?
+                                                    .participants
+                                                    .into_iter()
+                                                    .map(|p| p.player?.id)
+                                                    .try_collect()
                                             })
-                                            .collect();
+                                            .try_collect()?;
                                         Some(SetResponse { teams, winner })
                                     })
                                     .collect::<Vec<_>>(),
