@@ -6,6 +6,8 @@ pub mod search_games;
 pub use search_games::*;
 pub mod tournament_sets;
 pub use tournament_sets::*;
+pub mod player_info;
+pub use player_info::*;
 
 use schema::schema;
 
