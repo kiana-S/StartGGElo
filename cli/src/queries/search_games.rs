@@ -32,17 +32,15 @@ struct Videogame {
 
 // Unwrapping
 
-pub struct VideogameResponse {
+pub struct VideogameData {
     pub id: VideogameId,
     pub name: String,
 }
 
 impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
-    type Unwrapped = Vec<VideogameResponse>;
+    type Unwrapped = Vec<VideogameData>;
 
-    fn unwrap_response(
-        response: GraphQlResponse<VideogameSearch>,
-    ) -> Option<Vec<VideogameResponse>> {
+    fn unwrap_response(response: GraphQlResponse<VideogameSearch>) -> Option<Vec<VideogameData>> {
         Some(
             response
                 .data?
@@ -50,7 +48,7 @@ impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
                 .nodes
                 .into_iter()
                 .filter_map(|game| {
-                    Some(VideogameResponse {
+                    Some(VideogameData {
                         id: game.id?,
                         name: game.name?,
                     })

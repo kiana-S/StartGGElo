@@ -95,23 +95,21 @@ struct Player {
 
 // Unwrap
 
-pub struct TournamentResponse {
+pub struct TournamentData {
     pub name: String,
-    pub sets: Vec<SetResponse>,
+    pub sets: Vec<SetData>,
 }
 
-pub struct SetResponse {
+pub struct SetData {
     pub teams: Vec<Vec<PlayerId>>,
     pub winner: usize,
 }
 
 impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
-    type Unwrapped = Vec<TournamentResponse>;
+    type Unwrapped = Vec<TournamentData>;
 
     // This might be the most spaghetti code I've ever written
-    fn unwrap_response(
-        response: GraphQlResponse<TournamentSets>,
-    ) -> Option<Vec<TournamentResponse>> {
+    fn unwrap_response(response: GraphQlResponse<TournamentSets>) -> Option<Vec<TournamentData>> {
         Some(
             response
                 .data?
@@ -148,14 +146,14 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                                                     .try_collect()
                                             })
                                             .try_collect()?;
-                                        Some(SetResponse { teams, winner })
+                                        Some(SetData { teams, winner })
                                     })
                                     .collect::<Vec<_>>(),
                             )
                         })
                         .flatten()
                         .collect();
-                    Some(TournamentResponse {
+                    Some(TournamentData {
                         name: tour.name?,
                         sets,
                     })

@@ -26,17 +26,17 @@ struct Player {
 
 // Unwrapping
 
-pub struct PlayerInfoResponse {
+pub struct PlayerData {
     pub name: Option<String>,
     pub prefix: Option<String>,
 }
 
 impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
-    type Unwrapped = PlayerInfoResponse;
+    type Unwrapped = PlayerData;
 
-    fn unwrap_response(response: GraphQlResponse<PlayerInfo>) -> Option<PlayerInfoResponse> {
+    fn unwrap_response(response: GraphQlResponse<PlayerInfo>) -> Option<PlayerData> {
         let player = response.data?.player?;
-        Some(PlayerInfoResponse {
+        Some(PlayerData {
             name: player.gamer_tag,
             prefix: player.prefix.filter(|pr| !pr.is_empty()),
         })
