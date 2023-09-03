@@ -106,12 +106,7 @@ pub struct SetResponse {
 }
 
 impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
-    type VarsUnwrapped = TournamentSetsVars<'a>;
     type Unwrapped = Vec<TournamentResponse>;
-
-    fn wrap_vars(vars: TournamentSetsVars) -> TournamentSetsVars {
-        vars
-    }
 
     // This might be the most spaghetti code I've ever written
     fn unwrap_response(

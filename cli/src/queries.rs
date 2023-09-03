@@ -59,18 +59,13 @@ pub struct Timestamp(pub u64);
 // Query machinery
 
 pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
-    type VarsUnwrapped;
     type Unwrapped;
 
-    fn wrap_vars(vars: Self::VarsUnwrapped) -> Vars;
     fn unwrap_response(response: GraphQlResponse<Self>) -> Option<Self::Unwrapped>;
 }
 
 // Generic function for running start.gg queries
-pub fn run_query<Builder, Vars>(
-    vars: Builder::VarsUnwrapped,
-    auth: &str,
-) -> Option<Builder::Unwrapped>
+pub fn run_query<Builder, Vars>(vars: Vars, auth: &str) -> Option<Builder::Unwrapped>
 where
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
@@ -78,7 +73,7 @@ where
 {
     use cynic::http::ReqwestBlockingExt;
 
-    let query = Builder::build(Builder::wrap_vars(vars));
+    let query = Builder::build(vars);
 
     let response = reqwest::blocking::Client::new()
         .post("https://api.start.gg/gql/alpha")

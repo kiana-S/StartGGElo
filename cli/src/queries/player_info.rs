@@ -32,12 +32,7 @@ pub struct PlayerInfoResponse {
 }
 
 impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
-    type VarsUnwrapped = PlayerInfoVars;
     type Unwrapped = PlayerInfoResponse;
-
-    fn wrap_vars(vars: PlayerInfoVars) -> PlayerInfoVars {
-        vars
-    }
 
     fn unwrap_response(response: GraphQlResponse<PlayerInfo>) -> Option<PlayerInfoResponse> {
         let player = response.data?.player?;

@@ -38,12 +38,7 @@ pub struct VideogameResponse {
 }
 
 impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
-    type VarsUnwrapped = VideogameSearchVars<'a>;
     type Unwrapped = Vec<VideogameResponse>;
-
-    fn wrap_vars(vars: VideogameSearchVars) -> VideogameSearchVars {
-        vars
-    }
 
     fn unwrap_response(
         response: GraphQlResponse<VideogameSearch>,
