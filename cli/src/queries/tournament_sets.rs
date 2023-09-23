@@ -91,6 +91,8 @@ struct Participant {
 #[derive(cynic::QueryFragment, Debug)]
 struct Player {
     id: Option<PlayerId>,
+    gamer_tag: Option<String>,
+    prefix: Option<String>,
 }
 
 // Unwrap
@@ -103,6 +105,12 @@ pub struct TournamentData {
 pub struct SetData {
     pub teams: Vec<Vec<PlayerId>>,
     pub winner: usize,
+}
+
+pub struct PlayerData {
+    pub id: PlayerId,
+    pub gamer_tag: Option<String>,
+    pub prefix: Option<String>,
 }
 
 impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
@@ -142,7 +150,14 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                                                 slot.entrant?
                                                     .participants
                                                     .into_iter()
-                                                    .map(|p| p.player?.id)
+                                                    .map(|p| {
+                                                        let p_ = p.player?;
+                                                        Some(PlayerData {
+                                                            id: p_.id?,
+                                                            gamer_tag: p_.gamer_tag,
+                                                            prefix: p_.prefix,
+                                                        })
+                                                    })
                                                     .try_collect()
                                             })
                                             .try_collect()?;
