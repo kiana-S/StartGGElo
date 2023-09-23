@@ -1,25 +1,38 @@
-use sqlite::Connection;
+use sqlite::*;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
 /// Return the path to a dataset.
-fn dataset_path(config_dir: &Path, dataset: &str) -> PathBuf {
+pub fn dataset_path(config_dir: &Path, dataset: &str) -> PathBuf {
+    // $config_dir/datasets/$dataset.sqlite
     let mut path = config_dir.to_owned();
     path.push("datasets");
+
+    // Create datasets path if it doesn't exist
+    fs::create_dir_all(&path).unwrap();
+
     path.push(dataset);
-    path.set_extension("sqlite");
+    path.set_extension("db");
     path
 }
 
-/// Create a new dataset given a path.
-pub fn new_dataset(dataset: &Path) -> sqlite::Result<Connection> {
+pub fn open_dataset(dataset: &Path) -> sqlite::Result<Connection> {
     let query = "
-        CREATE TABLE players (
-            id INTEGER PRIMARY KEY ASC,
+        CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY,
             name TEXT,
-            elo REAL
+            prefix TEXT,
+            elo REAL NOT NULL
         ) STRICT;
     ";
 
+    File::create(dataset).map_err(|e| Error {
+        code: {
+            println!("{:?}", e);
+            None
+        },
+        message: Some("unable to open database file".to_owned()),
+    })?;
     let connection = sqlite::open(dataset)?;
     connection.execute(query)?;
     Ok(connection)
