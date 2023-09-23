@@ -32,6 +32,7 @@ struct Videogame {
 
 // Unwrapping
 
+#[derive(Debug, Clone)]
 pub struct VideogameData {
     pub id: VideogameId,
     pub name: String,

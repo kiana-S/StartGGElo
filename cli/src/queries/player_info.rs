@@ -20,13 +20,16 @@ pub struct PlayerInfo {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Player {
+    id: Option<PlayerId>,
     gamer_tag: Option<String>,
     prefix: Option<String>,
 }
 
 // Unwrapping
 
+#[derive(Debug, Clone)]
 pub struct PlayerData {
+    pub id: PlayerId,
     pub name: Option<String>,
     pub prefix: Option<String>,
 }
@@ -37,6 +40,7 @@ impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
     fn unwrap_response(response: GraphQlResponse<PlayerInfo>) -> Option<PlayerData> {
         let player = response.data?.player?;
         Some(PlayerData {
+            id: player.id?,
             name: player.gamer_tag,
             prefix: player.prefix.filter(|pr| !pr.is_empty()),
         })

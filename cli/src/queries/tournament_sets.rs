@@ -1,6 +1,8 @@
-use super::{EntrantId, PlayerId, QueryUnwrap, Timestamp, VideogameId};
+use super::{EntrantId, PlayerData, PlayerId, QueryUnwrap, Timestamp, VideogameId};
 use cynic::GraphQlResponse;
 use schema::schema;
+
+pub type Teams<T> = Vec<Vec<T>>;
 
 // Variables
 
@@ -97,20 +99,16 @@ struct Player {
 
 // Unwrap
 
+#[derive(Debug, Clone)]
 pub struct TournamentData {
     pub name: String,
     pub sets: Vec<SetData>,
 }
 
+#[derive(Debug, Clone)]
 pub struct SetData {
-    pub teams: Vec<Vec<PlayerId>>,
+    pub teams: Teams<PlayerData>,
     pub winner: usize,
-}
-
-pub struct PlayerData {
-    pub id: PlayerId,
-    pub gamer_tag: Option<String>,
-    pub prefix: Option<String>,
 }
 
 impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
@@ -154,7 +152,7 @@ impl<'a> QueryUnwrap<TournamentSetsVars<'a>> for TournamentSets {
                                                         let p_ = p.player?;
                                                         Some(PlayerData {
                                                             id: p_.id?,
-                                                            gamer_tag: p_.gamer_tag,
+                                                            name: p_.gamer_tag,
                                                             prefix: p_.prefix,
                                                         })
                                                     })
