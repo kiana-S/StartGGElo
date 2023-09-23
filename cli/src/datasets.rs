@@ -1,3 +1,4 @@
+use crate::queries::*;
 use sqlite::*;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -66,3 +67,67 @@ fn adjust_ratings(ratings: Teams<&mut f64>, winner: usize) {
         })
 }
 
+// Database Updating
+
+pub fn add_players(connection: &Connection, teams: &Teams<PlayerData>) -> sqlite::Result<()> {
+    let query = "INSERT OR IGNORE INTO players VALUES (?, ?, ?, 1500)";
+
+    teams.iter().try_for_each(|team| {
+        team.iter().try_for_each(|PlayerData { id, name, prefix }| {
+            let mut statement = connection.prepare(query)?;
+            statement.bind((1, id.0 as i64))?;
+            statement.bind((2, name.as_ref().map(|x| &x[..])))?;
+            statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+            Ok(())
+        })
+    })
+}
+
+pub fn get_ratings(
+    connection: &Connection,
+    teams: &Teams<PlayerData>,
+) -> sqlite::Result<Teams<(PlayerId, f64)>> {
+    let query = "SELECT id, elo FROM players WHERE id = ?";
+
+    teams
+        .iter()
+        .map(|team| {
+            team.iter()
+                .map(|data| {
+                    let mut statement = connection.prepare(query)?;
+                    statement.bind((1, data.id.0 as i64))?;
+                    statement.next()?;
+                    Ok((data.id, statement.read::<f64, _>("elo")?))
+                })
+                .try_collect()
+        })
+        .try_collect()
+}
+
+pub fn update_ratings(connection: &Connection, elos: Teams<(PlayerId, f64)>) -> sqlite::Result<()> {
+    let query = "UPDATE players SET elo = :elo WHERE id = :id";
+    elos.into_iter().try_for_each(|team| {
+        team.into_iter().try_for_each(|(id, elo)| {
+            let mut statement = connection.prepare(query)?;
+            statement.bind((":elo", elo))?;
+            statement.bind((":id", id.0 as i64))?;
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+            Ok(())
+        })
+    })
+}
+
+pub fn update_from_set(connection: &Connection, results: SetData) -> sqlite::Result<()> {
+    let players_data = results.teams;
+    add_players(connection, &players_data)?;
+
+    let mut elos = get_ratings(connection, &players_data)?;
+    adjust_ratings(
+        elos.iter_mut()
+            .map(|v| v.iter_mut().map(|x| &mut x.1).collect())
+            .collect(),
+        results.winner,
+    );
+    update_ratings(connection, elos)
+}
