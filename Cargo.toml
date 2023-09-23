@@ -1,5 +1,26 @@
 [workspace]
-members = [
-  "schema",
-  "cli"
-]
+
+[package]
+name = "ggelo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ggelo"
+path = "src/main.rs"
+
+[dependencies]
+# GraphQL schema
+schema.path = "schema"
+
+# API access
+cynic = { version = "3.2", features = ["http-reqwest-blocking"] }
+reqwest = "0.11"
+serde = "1.0"
+
+# Local file manipulation
+dirs = "5.0"
+sqlite = "0.31"
+
+[build-dependencies]
+cynic-codegen = "3.2"

@@ -30,7 +30,6 @@
             pname = "ggelo";
             version = "0.1.0";
             src = craneLib.path ./.;
-            cargoBuildFlags = "-p cli";
             buildInputs = [ pkgs.openssl pkgs.sqlite ];
             nativeBuildInputs = [ pkgs.pkg-config ];
           };
