@@ -17,7 +17,7 @@ pub fn get_auth_key(config_dir: &Path) -> Option<String> {
     use std::env::{var, VarError};
     use std::fs::read_to_string;
 
-    match var("AUTH_KEY") {
+    match var("AUTH_TOKEN") {
         Ok(key) => Some(key),
         Err(VarError::NotUnicode(_)) => panic!("Invalid authorization key"),
         Err(VarError::NotPresent) => {
