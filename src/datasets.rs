@@ -4,37 +4,67 @@ use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Return the path to a dataset.
-pub fn dataset_path(config_dir: &Path, dataset: &str) -> io::Result<PathBuf> {
-    // $config_dir/datasets/$dataset.sqlite
+/// Return the default path to the datasets file.
+fn default_datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     let mut path = config_dir.to_owned();
-    path.push("datasets");
+    path.push("ggelo");
 
     // Create datasets path if it doesn't exist
     fs::create_dir_all(&path)?;
 
-    path.push(dataset);
-    path.set_extension("db");
+    path.push("ggelo.db");
 
-    // Create dataset file if it doesn't exist
+    // Create datasets file if it doesn't exist
     OpenOptions::new().write(true).create(true).open(&path)?;
 
     Ok(path)
 }
 
-pub fn open_dataset(dataset: &Path) -> sqlite::Result<Connection> {
+pub fn open_datasets(config_dir: &Path, path: Option<&Path>) -> sqlite::Result<Connection> {
+    let path = path.map_or_else(
+        || default_datasets_path(config_dir).unwrap(),
+        |p| p.to_owned(),
+    );
+
     let query = "
-        CREATE TABLE IF NOT EXISTS players (
+        CREATE TABLE IF NOT EXISTS datasets (
+            name TEXT UNIQUE NOT NULL
+        ) STRICT;
+    ";
+
+    let connection = sqlite::open(path)?;
+    connection.execute(query)?;
+    Ok(connection)
+}
+
+// TODO: Sanitize dataset names
+
+pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<String>> {
+    let query = "SELECT * FROM datasets";
+
+    connection
+        .prepare(query)?
+        .into_iter()
+        .map(|x| x.map(|r| r.read::<&str, _>("name").to_owned()))
+        .try_collect()
+}
+
+pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
+    let query = format!(
+        "
+        INSERT INTO datasets VALUES ('{0}');
+
+        CREATE TABLE IF NOT EXISTS \"dataset_{0}\" (
             id INTEGER PRIMARY KEY,
             name TEXT,
             prefix TEXT,
             elo REAL NOT NULL
         ) STRICT;
-    ";
+    ",
+        dataset
+    );
 
-    let connection = sqlite::open(dataset)?;
-    connection.execute(query)?;
-    Ok(connection)
+    connection.execute(query)
 }
 
 // Score calculation
@@ -67,33 +97,40 @@ fn adjust_ratings(ratings: Teams<&mut f64>, winner: usize) {
 
 // Database Updating
 
-pub fn add_players(connection: &Connection, teams: &Teams<PlayerData>) -> sqlite::Result<()> {
-    let query = "INSERT OR IGNORE INTO players VALUES (?, ?, ?, 1500)";
+pub fn add_players(
+    connection: &Connection,
+    dataset: &str,
+    teams: &Teams<PlayerData>,
+) -> sqlite::Result<()> {
+    let query = format!(
+        "INSERT OR IGNORE INTO \"dataset_{}\" VALUES (?, ?, ?, 1500)",
+        dataset
+    );
 
     teams.iter().try_for_each(|team| {
         team.iter().try_for_each(|PlayerData { id, name, prefix }| {
-            let mut statement = connection.prepare(query)?;
+            let mut statement = connection.prepare(&query)?;
             statement.bind((1, id.0 as i64))?;
             statement.bind((2, name.as_ref().map(|x| &x[..])))?;
             statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
-            statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
-            Ok(())
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))
         })
     })
 }
 
 pub fn get_ratings(
     connection: &Connection,
+    dataset: &str,
     teams: &Teams<PlayerData>,
 ) -> sqlite::Result<Teams<(PlayerId, f64)>> {
-    let query = "SELECT id, elo FROM players WHERE id = ?";
+    let query = format!("SELECT id, elo FROM \"dataset_{}\" WHERE id = ?", dataset);
 
     teams
         .iter()
         .map(|team| {
             team.iter()
                 .map(|data| {
-                    let mut statement = connection.prepare(query)?;
+                    let mut statement = connection.prepare(&query)?;
                     statement.bind((1, data.id.0 as i64))?;
                     statement.next()?;
                     Ok((data.id, statement.read::<f64, _>("elo")?))
@@ -103,29 +140,39 @@ pub fn get_ratings(
         .try_collect()
 }
 
-pub fn update_ratings(connection: &Connection, elos: Teams<(PlayerId, f64)>) -> sqlite::Result<()> {
-    let query = "UPDATE players SET elo = :elo WHERE id = :id";
+pub fn update_ratings(
+    connection: &Connection,
+    dataset: &str,
+    elos: Teams<(PlayerId, f64)>,
+) -> sqlite::Result<()> {
+    let query = format!(
+        "UPDATE \"dataset_{}\" SET elo = :elo WHERE id = :id",
+        dataset
+    );
     elos.into_iter().try_for_each(|team| {
         team.into_iter().try_for_each(|(id, elo)| {
-            let mut statement = connection.prepare(query)?;
+            let mut statement = connection.prepare(&query)?;
             statement.bind((":elo", elo))?;
             statement.bind((":id", id.0 as i64))?;
-            statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
-            Ok(())
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))
         })
     })
 }
 
-pub fn update_from_set(connection: &Connection, results: SetData) -> sqlite::Result<()> {
+pub fn update_from_set(
+    connection: &Connection,
+    dataset: &str,
+    results: SetData,
+) -> sqlite::Result<()> {
     let players_data = results.teams;
-    add_players(connection, &players_data)?;
+    add_players(connection, dataset, &players_data)?;
 
-    let mut elos = get_ratings(connection, &players_data)?;
+    let mut elos = get_ratings(connection, dataset, &players_data)?;
     adjust_ratings(
         elos.iter_mut()
             .map(|v| v.iter_mut().map(|x| &mut x.1).collect())
             .collect(),
         results.winner,
     );
-    update_ratings(connection, elos)
+    update_ratings(connection, dataset, elos)
 }

@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 mod queries;
 use queries::*;
@@ -17,12 +18,9 @@ use datasets::*;
 #[command(author = "Kiana Sheibani <kiana.a.sheibani@gmail.com>")]
 #[command(version = "0.1.0")]
 #[command(about = "Elo rating calculator for start.gg tournaments", long_about = None)]
-#[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]
     subcommand: Subcommands,
-    #[arg(long)]
-    auth_token: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -36,53 +34,44 @@ enum Subcommands {
 #[derive(Subcommand)]
 enum DatasetSC {
     List,
+    New { name: Option<String> },
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let mut config_dir = dirs::config_dir().unwrap();
-    config_dir.push("ggelo");
-
-    let auth_token = get_auth_key(&config_dir).unwrap();
-
-    let app_state = AppState {
-        config_dir,
-        auth_token,
-    };
-
     match cli.subcommand {
         Subcommands::Dataset {
             subcommand: DatasetSC::List,
-        } => dataset_list(app_state),
+        } => dataset_list(),
+        Subcommands::Dataset {
+            subcommand: DatasetSC::New { name },
+        } => dataset_new(name),
     }
-
-    // let config = AppState {
-    //     config_dir,
-    //     auth_token,
-    // };
-
-    // let path = dataset_path(&config_dir, "test").unwrap();
-    // let connection = open_dataset(&path).unwrap();
-
-    // let set_data = SetData {
-    //     teams: vec![
-    //         vec![PlayerData {
-    //             id: PlayerId(1),
-    //             name: Some("player1".to_owned()),
-    //             prefix: None,
-    //         }],
-    //         vec![PlayerData {
-    //             id: PlayerId(2),
-    //             name: Some("player2".to_owned()),
-    //             prefix: None,
-    //         }],
-    //     ],
-    //     winner: 0,
-    // };
-
-    // update_from_set(&connection, set_data.clone()).unwrap();
-    // println!("{:?}", get_ratings(&connection, &set_data.teams).unwrap());
 }
 
-fn dataset_list(state: AppState) {}
+fn dataset_list() {
+    let config_dir = dirs::config_dir().unwrap();
+
+    let connection = open_datasets(&config_dir, None).unwrap();
+    let datasets = list_datasets(&connection).unwrap();
+
+    println!("{:?}", datasets);
+}
+
+fn dataset_new(name: Option<String>) {
+    let config_dir = dirs::config_dir().unwrap();
+
+    let name = name.unwrap_or_else(|| {
+        let mut line = String::new();
+        print!("Name of new dataset: ");
+        io::stdout().flush().expect("Could not access stdout");
+        io::stdin()
+            .read_line(&mut line)
+            .expect("Could not read from stdin");
+        line.trim().to_owned()
+    });
+
+    let connection = open_datasets(&config_dir, None).unwrap();
+    new_dataset(&connection, &name).unwrap();
+}
