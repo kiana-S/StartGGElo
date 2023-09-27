@@ -4,6 +4,8 @@ use std::io::{self, Write};
 
 mod queries;
 use queries::*;
+mod state;
+use state::*;
 mod datasets;
 use datasets::*;
 
@@ -11,7 +13,14 @@ fn main() {
     let mut config_dir = dirs::config_dir().unwrap();
     config_dir.push("ggelo");
 
-    let path = dataset_path(&config_dir, "test");
+    let auth_token = get_auth_key(&config_dir).unwrap();
+
+    // let config = AppState {
+    //     config_dir,
+    //     auth_token,
+    // };
+
+    let path = dataset_path(&config_dir, "test").unwrap();
     let connection = open_dataset(&path).unwrap();
 
     let set_data = SetData {

@@ -9,6 +9,7 @@ pub use tournament_sets::*;
 pub mod player_info;
 pub use player_info::*;
 
+use crate::state::*;
 use schema::schema;
 
 // Auth key
@@ -65,7 +66,7 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 }
 
 // Generic function for running start.gg queries
-pub fn run_query<Builder, Vars>(vars: Vars, auth: &str) -> Option<Builder::Unwrapped>
+pub fn run_query<Builder, Vars>(vars: Vars, state: &AppState) -> Option<Builder::Unwrapped>
 where
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
@@ -77,7 +78,7 @@ where
 
     let response = reqwest::blocking::Client::new()
         .post("https://api.start.gg/gql/alpha")
-        .header("Authorization", String::from("Bearer ") + auth)
+        .header("Authorization", String::from("Bearer ") + &state.auth_token)
         .run_graphql(query);
 
     Builder::unwrap_response(response.unwrap())
