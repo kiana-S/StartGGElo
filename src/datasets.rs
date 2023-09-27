@@ -1,20 +1,25 @@
 use crate::queries::*;
 use sqlite::*;
-use std::fs::{self, File};
+use std::fs::{self, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Return the path to a dataset.
-pub fn dataset_path(config_dir: &Path, dataset: &str) -> PathBuf {
+pub fn dataset_path(config_dir: &Path, dataset: &str) -> io::Result<PathBuf> {
     // $config_dir/datasets/$dataset.sqlite
     let mut path = config_dir.to_owned();
     path.push("datasets");
 
     // Create datasets path if it doesn't exist
-    fs::create_dir_all(&path).unwrap();
+    fs::create_dir_all(&path)?;
 
     path.push(dataset);
     path.set_extension("db");
-    path
+
+    // Create dataset file if it doesn't exist
+    OpenOptions::new().write(true).create(true).open(&path)?;
+
+    Ok(path)
 }
 
 pub fn open_dataset(dataset: &Path) -> sqlite::Result<Connection> {
@@ -27,13 +32,6 @@ pub fn open_dataset(dataset: &Path) -> sqlite::Result<Connection> {
         ) STRICT;
     ";
 
-    File::create(dataset).map_err(|e| Error {
-        code: {
-            println!("{:?}", e);
-            None
-        },
-        message: Some("unable to open database file".to_owned()),
-    })?;
     let connection = sqlite::open(dataset)?;
     connection.execute(query)?;
     Ok(connection)
