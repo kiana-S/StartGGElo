@@ -4,8 +4,8 @@ use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Return the default path to the datasets file.
-fn default_datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
+/// Return the path to the datasets file.
+fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     let mut path = config_dir.to_owned();
     path.push("ggelo");
 
@@ -21,11 +21,12 @@ fn default_datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
 }
 
 pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
-    let path = default_datasets_path(config_dir).unwrap();
+    let path = datasets_path(config_dir).unwrap();
 
     let query = "
         CREATE TABLE IF NOT EXISTS datasets (
-            name TEXT UNIQUE NOT NULL
+            name TEXT UNIQUE NOT NULL,
+            last_sync INTEGER NOT NULL DEFAULT 1
         ) STRICT;";
 
     let connection = sqlite::open(path)?;
@@ -69,6 +70,29 @@ pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()>
     );
 
     connection.execute(query)
+}
+
+pub fn get_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<Option<u64>> {
+    let query = "SELECT last_sync FROM datasets WHERE name = ?";
+
+    Ok(connection
+        .prepare(query)?
+        .into_iter()
+        .bind((1, dataset))?
+        .map(|x| x.map(|r| r.read::<i64, _>("last_sync").to_owned() as u64))
+        .next()
+        .and_then(Result::ok))
+}
+
+pub fn update_last_sync(connection: &Connection, dataset: &str, sync: u64) -> sqlite::Result<()> {
+    let query = "UPDATE datasets SET last_sync = :sync WHERE name = :dataset";
+
+    connection
+        .prepare(query)?
+        .into_iter()
+        .bind((":sync", sync as i64))?
+        .bind((":dataset", dataset))?
+        .try_for_each(|x| x.map(|_| ()))
 }
 
 // Score calculation
@@ -163,11 +187,7 @@ pub fn update_ratings(
     })
 }
 
-pub fn update_from_set(
-    connection: &Connection,
-    dataset: &str,
-    results: SetData,
-) -> sqlite::Result<()> {
+fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> sqlite::Result<()> {
     let players_data = results.teams;
     add_players(connection, dataset, &players_data)?;
 
@@ -179,4 +199,25 @@ pub fn update_from_set(
         results.winner,
     );
     update_ratings(connection, dataset, elos)
+}
+
+fn update_from_tournament(
+    connection: &Connection,
+    dataset: &str,
+    results: TournamentData,
+) -> sqlite::Result<()> {
+    results
+        .sets
+        .into_iter()
+        .try_for_each(|set| update_from_set(connection, dataset, set))
+}
+
+pub fn update_from_tournaments(
+    connection: &Connection,
+    dataset: &str,
+    results: Vec<TournamentData>,
+) -> sqlite::Result<()> {
+    results
+        .into_iter()
+        .try_for_each(|tour| update_from_tournament(connection, dataset, tour))
 }

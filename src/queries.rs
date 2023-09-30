@@ -14,7 +14,7 @@ use schema::schema;
 
 // Auth key
 
-pub fn get_auth_key(config_dir: &Path) -> Option<String> {
+pub fn get_auth_token(config_dir: &Path) -> Option<String> {
     use std::env::{var, VarError};
     use std::fs::read_to_string;
 
@@ -66,7 +66,7 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 }
 
 // Generic function for running start.gg queries
-pub fn run_query<Builder, Vars>(vars: Vars, state: &AppState) -> Option<Builder::Unwrapped>
+pub fn run_query<Builder, Vars>(vars: Vars, auth_token: &str) -> Option<Builder::Unwrapped>
 where
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
@@ -78,7 +78,7 @@ where
 
     let response = reqwest::blocking::Client::new()
         .post("https://api.start.gg/gql/alpha")
-        .header("Authorization", String::from("Bearer ") + &state.auth_token)
+        .header("Authorization", String::from("Bearer ") + auth_token)
         .run_graphql(query);
 
     Builder::unwrap_response(response.unwrap())

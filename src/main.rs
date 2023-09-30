@@ -2,12 +2,11 @@
 
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::time::SystemTime;
 
 mod queries;
 use queries::*;
-mod state;
-use state::*;
 mod datasets;
 use datasets::*;
 
@@ -35,6 +34,12 @@ enum Subcommands {
         #[command(subcommand)]
         subcommand: DatasetSC,
     },
+    Sync {
+        #[arg(group = "datasets")]
+        names: Vec<String>,
+        #[arg(short, long, group = "datasets")]
+        all: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -57,6 +62,8 @@ fn main() {
         Subcommands::Dataset {
             subcommand: DatasetSC::Delete { name },
         } => dataset_delete(name),
+
+        Subcommands::Sync { names, all } => sync(names, all, cli.auth_token),
     }
 }
 
@@ -101,4 +108,42 @@ fn dataset_delete(name: Option<String>) {
 
     let connection = open_datasets(&config_dir).unwrap();
     delete_dataset(&connection, &name).unwrap();
+}
+
+fn sync(names: Vec<String>, all: bool, auth_token: Option<String>) {
+    let config_dir = dirs::config_dir().unwrap();
+
+    let auth = auth_token.or_else(|| get_auth_token(&config_dir)).unwrap();
+
+    let connection = open_datasets(&config_dir).unwrap();
+
+    let names = if all {
+        list_datasets(&connection).unwrap()
+    } else {
+        names
+    };
+
+    for name in names {
+        let last_sync = get_last_sync(&connection, &name).unwrap().unwrap();
+
+        let results = run_query::<TournamentSets, _>(
+            TournamentSetsVars {
+                last_query: Timestamp(last_sync),
+                game_id: VideogameId(1),
+                country: None,
+                state: None,
+            },
+            &auth,
+        )
+        .unwrap();
+
+        update_from_tournaments(&connection, &name, results).unwrap();
+
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        update_last_sync(&connection, &name, current_time).unwrap();
+    }
 }
