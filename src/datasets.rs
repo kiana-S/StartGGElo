@@ -20,17 +20,13 @@ fn default_datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     Ok(path)
 }
 
-pub fn open_datasets(config_dir: &Path, path: Option<&Path>) -> sqlite::Result<Connection> {
-    let path = path.map_or_else(
-        || default_datasets_path(config_dir).unwrap(),
-        |p| p.to_owned(),
-    );
+pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
+    let path = default_datasets_path(config_dir).unwrap();
 
     let query = "
         CREATE TABLE IF NOT EXISTS datasets (
             name TEXT UNIQUE NOT NULL
-        ) STRICT;
-    ";
+        ) STRICT;";
 
     let connection = sqlite::open(path)?;
     connection.execute(query)?;
@@ -49,18 +45,26 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<String>> {
         .try_collect()
 }
 
+pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
+    let query = format!(
+        r#"DELETE FROM datasets WHERE name = '{0}';
+        DROP TABLE "dataset_{0}";"#,
+        dataset
+    );
+
+    connection.execute(query)
+}
+
 pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
     let query = format!(
-        "
-        INSERT INTO datasets VALUES ('{0}');
+        r#"INSERT INTO datasets VALUES ('{0}');
 
-        CREATE TABLE IF NOT EXISTS \"dataset_{0}\" (
+        CREATE TABLE IF NOT EXISTS "dataset_{0}" (
             id INTEGER PRIMARY KEY,
             name TEXT,
             prefix TEXT,
             elo REAL NOT NULL
-        ) STRICT;
-    ",
+        ) STRICT;"#,
         dataset
     );
 
@@ -103,7 +107,7 @@ pub fn add_players(
     teams: &Teams<PlayerData>,
 ) -> sqlite::Result<()> {
     let query = format!(
-        "INSERT OR IGNORE INTO \"dataset_{}\" VALUES (?, ?, ?, 1500)",
+        r#"INSERT OR IGNORE INTO "dataset_{}" VALUES (?, ?, ?, 1500)"#,
         dataset
     );
 
@@ -123,7 +127,7 @@ pub fn get_ratings(
     dataset: &str,
     teams: &Teams<PlayerData>,
 ) -> sqlite::Result<Teams<(PlayerId, f64)>> {
-    let query = format!("SELECT id, elo FROM \"dataset_{}\" WHERE id = ?", dataset);
+    let query = format!(r#"SELECT id, elo FROM "dataset_{}" WHERE id = ?"#, dataset);
 
     teams
         .iter()
@@ -146,7 +150,7 @@ pub fn update_ratings(
     elos: Teams<(PlayerId, f64)>,
 ) -> sqlite::Result<()> {
     let query = format!(
-        "UPDATE \"dataset_{}\" SET elo = :elo WHERE id = :id",
+        r#"UPDATE "dataset_{}" SET elo = :elo WHERE id = :id"#,
         dataset
     );
     elos.into_iter().try_for_each(|team| {
