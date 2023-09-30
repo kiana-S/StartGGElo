@@ -9,7 +9,6 @@ pub use tournament_sets::*;
 pub mod player_info;
 pub use player_info::*;
 
-use crate::state::*;
 use schema::schema;
 
 // Auth key
