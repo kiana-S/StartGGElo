@@ -21,31 +21,65 @@ struct Cli {
     #[command(subcommand)]
     subcommand: Subcommands,
 
-    #[arg(short = 'A', long = "auth", value_name = "TOKEN", global = true)]
+    #[arg(
+        short = 'A',
+        long = "auth",
+        value_name = "TOKEN",
+        global = true,
+        help = "Authentication token",
+        long_help = "The authentication token for accessing start.gg.
+A token can be specified using this argument, in the environment variable
+AUTH_TOKEN, or in a text file '<CONFIG_DIR>/auth.txt'."
+    )]
     auth_token: Option<String>,
 
-    #[arg(short, long = "config", value_name = "DIR", global = true)]
+    #[arg(
+        short,
+        long = "config",
+        value_name = "DIR",
+        global = true,
+        help = "Config directory",
+        long_help = "This option overrides the default config directory.
+If this directory does not exist, it will be created and a database file will
+be initialized within it."
+    )]
     config_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
 enum Subcommands {
+    #[command(about = "Manipulate stored datasets")]
     Dataset {
         #[command(subcommand)]
         subcommand: DatasetSC,
     },
+    #[command(
+        about = "Sync player ratings",
+        long_about = "Pull recent tournament data off of start.gg and use it to update each player's
+stored ratings. This command will automatically keep track of the last time each
+dataset was synced."
+    )]
     Sync {
-        #[arg(group = "datasets")]
-        names: Vec<String>,
-        #[arg(short, long, group = "datasets")]
+        #[arg(
+            group = "datasets",
+            help = "The datasets to sync",
+            long_help = "A list of datasets to sync.
+If no datasets are given, then the dataset 'default' is synced. This dataset is
+created if it does not already exist."
+        )]
+        datasets: Vec<String>,
+        #[arg(short, long, group = "datasets", help = "Sync all stored databases")]
         all: bool,
     },
 }
 
 #[derive(Subcommand)]
 enum DatasetSC {
+    #[command(about = "List datasets")]
     List,
+    #[command(about = "Create a new dataset")]
     New { name: Option<String> },
+    #[command(about = "Delete a dataset")]
     Delete { name: Option<String> },
 }
 
@@ -63,7 +97,7 @@ fn main() {
             subcommand: DatasetSC::Delete { name },
         } => dataset_delete(name),
 
-        Subcommands::Sync { names, all } => sync(names, all, cli.auth_token),
+        Subcommands::Sync { datasets, all } => sync(datasets, all, cli.auth_token),
     }
 }
 
@@ -110,24 +144,24 @@ fn dataset_delete(name: Option<String>) {
     delete_dataset(&connection, &name).unwrap();
 }
 
-fn sync(names: Vec<String>, all: bool, auth_token: Option<String>) {
+fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let config_dir = dirs::config_dir().unwrap();
 
     let auth = auth_token.or_else(|| get_auth_token(&config_dir)).unwrap();
 
     let connection = open_datasets(&config_dir).unwrap();
 
-    let names = if all {
+    let datasets = if all {
         list_datasets(&connection).unwrap()
-    } else if names.len() == 0 {
+    } else if datasets.len() == 0 {
         new_dataset(&connection, "default").unwrap();
         vec![String::from("default")]
     } else {
-        names
+        datasets
     };
 
-    for name in names {
-        let last_sync = get_last_sync(&connection, &name).unwrap().unwrap();
+    for dataset in datasets {
+        let last_sync = get_last_sync(&connection, &dataset).unwrap().unwrap();
 
         let results = run_query::<TournamentSets, _>(
             TournamentSetsVars {
@@ -142,13 +176,13 @@ fn sync(names: Vec<String>, all: bool, auth_token: Option<String>) {
         )
         .unwrap();
 
-        update_from_tournament(&connection, &name, results).unwrap();
+        update_from_tournament(&connection, &dataset, results).unwrap();
 
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        update_last_sync(&connection, &name, current_time).unwrap();
+        update_last_sync(&connection, &dataset, current_time).unwrap();
     }
 }
