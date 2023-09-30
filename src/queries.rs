@@ -1,5 +1,6 @@
 use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::path::Path;
 
 pub mod search_games;
@@ -22,6 +23,7 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
         Err(VarError::NotUnicode(_)) => panic!("Invalid authorization key"),
         Err(VarError::NotPresent) => {
             let mut auth_file = config_dir.to_owned();
+            auth_file.push("ggelo");
             auth_file.push("auth.txt");
             read_to_string(auth_file).ok().and_then(|s| {
                 let trimmed = s.trim();
@@ -67,6 +69,7 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 // Generic function for running start.gg queries
 pub fn run_query<Builder, Vars>(vars: Vars, auth_token: &str) -> Option<Builder::Unwrapped>
 where
+    Builder: Debug,
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
     for<'de> Builder: Deserialize<'de>,

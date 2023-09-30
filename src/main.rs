@@ -119,6 +119,9 @@ fn sync(names: Vec<String>, all: bool, auth_token: Option<String>) {
 
     let names = if all {
         list_datasets(&connection).unwrap()
+    } else if names.len() == 0 {
+        new_dataset(&connection, "default").unwrap();
+        vec![String::from("default")]
     } else {
         names
     };
@@ -130,14 +133,16 @@ fn sync(names: Vec<String>, all: bool, auth_token: Option<String>) {
             TournamentSetsVars {
                 last_query: Timestamp(last_sync),
                 game_id: VideogameId(1),
-                country: None,
-                state: None,
+                tournament: 1,
+                set_page: 1,
+                set_pagesize: 50,
+                event_limit: 9999999,
             },
             &auth,
         )
         .unwrap();
 
-        update_from_tournaments(&connection, &name, results).unwrap();
+        update_from_tournament(&connection, &name, results).unwrap();
 
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)

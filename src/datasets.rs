@@ -12,7 +12,7 @@ fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     // Create datasets path if it doesn't exist
     fs::create_dir_all(&path)?;
 
-    path.push("main.db");
+    path.push("datasets.sqlite");
 
     // Create datasets file if it doesn't exist
     OpenOptions::new().write(true).create(true).open(&path)?;
@@ -26,7 +26,7 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let query = "
         CREATE TABLE IF NOT EXISTS datasets (
             name TEXT UNIQUE NOT NULL,
-            last_sync INTEGER NOT NULL DEFAULT 1
+            last_sync INTEGER DEFAULT 1
         ) STRICT;";
 
     let connection = sqlite::open(path)?;
@@ -58,7 +58,7 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
 
 pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
     let query = format!(
-        r#"INSERT INTO datasets VALUES ('{0}');
+        r#"INSERT INTO datasets (name) VALUES ('{0}');
 
         CREATE TABLE IF NOT EXISTS "dataset_{0}" (
             id INTEGER PRIMARY KEY,
@@ -201,7 +201,7 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
     update_ratings(connection, dataset, elos)
 }
 
-fn update_from_tournament(
+pub fn update_from_tournament(
     connection: &Connection,
     dataset: &str,
     results: TournamentData,
@@ -210,14 +210,4 @@ fn update_from_tournament(
         .sets
         .into_iter()
         .try_for_each(|set| update_from_set(connection, dataset, set))
-}
-
-pub fn update_from_tournaments(
-    connection: &Connection,
-    dataset: &str,
-    results: Vec<TournamentData>,
-) -> sqlite::Result<()> {
-    results
-        .into_iter()
-        .try_for_each(|tour| update_from_tournament(connection, dataset, tour))
 }
