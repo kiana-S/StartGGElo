@@ -12,7 +12,7 @@ fn default_datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     // Create datasets path if it doesn't exist
     fs::create_dir_all(&path)?;
 
-    path.push("ggelo.db");
+    path.push("main.db");
 
     // Create datasets file if it doesn't exist
     OpenOptions::new().write(true).create(true).open(&path)?;
