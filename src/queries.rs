@@ -5,8 +5,10 @@ use std::path::Path;
 
 pub mod search_games;
 pub use search_games::*;
-pub mod tournament_sets;
-pub use tournament_sets::*;
+pub mod tournament_events;
+pub use tournament_events::*;
+pub mod event_sets;
+pub use event_sets::*;
 pub mod player_info;
 pub use player_info::*;
 
@@ -46,6 +48,10 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
 #[derive(cynic::Scalar, Debug, Copy, Clone)]
 #[cynic(graphql_type = "ID")]
 pub struct VideogameId(pub u64);
+
+#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[cynic(graphql_type = "ID")]
+pub struct EventId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone)]
 #[cynic(graphql_type = "ID")]

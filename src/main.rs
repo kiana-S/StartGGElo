@@ -9,6 +9,8 @@ mod queries;
 use queries::*;
 mod datasets;
 use datasets::*;
+mod sync;
+use sync::*;
 
 /// ## CLI Structs
 
@@ -162,27 +164,5 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
 
     for dataset in datasets {
         let last_sync = get_last_sync(&connection, &dataset).unwrap().unwrap();
-
-        let results = run_query::<TournamentSets, _>(
-            TournamentSetsVars {
-                last_query: Timestamp(last_sync),
-                game_id: VideogameId(1),
-                tournament: 1,
-                set_page: 1,
-                set_pagesize: 50,
-                event_limit: 9999999,
-            },
-            &auth,
-        )
-        .unwrap();
-
-        update_from_tournament(&connection, &dataset, results).unwrap();
-
-        let current_time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        update_last_sync(&connection, &dataset, current_time).unwrap();
     }
 }
