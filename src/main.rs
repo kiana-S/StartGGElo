@@ -3,6 +3,7 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::exit;
 use std::time::SystemTime;
 
 mod queries;
@@ -11,6 +12,11 @@ mod datasets;
 use datasets::*;
 mod sync;
 use sync::*;
+
+pub fn error(msg: &str, code: i32) -> ! {
+    println!("\nERROR: {}", msg);
+    exit(code)
+}
 
 /// ## CLI Structs
 
@@ -104,65 +110,91 @@ fn main() {
 }
 
 fn dataset_list() {
-    let config_dir = dirs::config_dir().unwrap();
+    let config_dir = dirs::config_dir().expect("Could not determine config directory");
 
-    let connection = open_datasets(&config_dir).unwrap();
-    let datasets = list_datasets(&connection).unwrap();
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+    let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
     println!("{:?}", datasets);
 }
 
+fn read_string() -> String {
+    let mut line = String::new();
+    io::stdout().flush().expect("Could not access stdout");
+    io::stdin()
+        .read_line(&mut line)
+        .expect("Could not read from stdin");
+    line.trim().to_owned()
+}
+
 fn dataset_new(name: Option<String>) {
-    let config_dir = dirs::config_dir().unwrap();
+    let config_dir = dirs::config_dir().expect("Could not determine config directory");
 
     let name = name.unwrap_or_else(|| {
-        let mut line = String::new();
         print!("Name of new dataset: ");
-        io::stdout().flush().expect("Could not access stdout");
-        io::stdin()
-            .read_line(&mut line)
-            .expect("Could not read from stdin");
-        line.trim().to_owned()
+        read_string()
     });
 
-    let connection = open_datasets(&config_dir).unwrap();
-    new_dataset(&connection, &name).unwrap();
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+    new_dataset(&connection, &name).expect("Error communicating with SQLite");
 }
 
 fn dataset_delete(name: Option<String>) {
-    let config_dir = dirs::config_dir().unwrap();
+    let config_dir = dirs::config_dir().expect("Could not determine config directory");
 
     let name = name.unwrap_or_else(|| {
-        let mut line = String::new();
         print!("Dataset to delete: ");
-        io::stdout().flush().expect("Could not access stdout");
-        io::stdin()
-            .read_line(&mut line)
-            .expect("Could not read from stdin");
-        line.trim().to_owned()
+        read_string()
     });
 
-    let connection = open_datasets(&config_dir).unwrap();
-    delete_dataset(&connection, &name).unwrap();
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+    delete_dataset(&connection, &name).expect("Error communicating with SQLite");
 }
 
 fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let config_dir = dirs::config_dir().unwrap();
 
-    let auth = auth_token.or_else(|| get_auth_token(&config_dir)).unwrap();
+    let auth = auth_token
+        .or_else(|| get_auth_token(&config_dir))
+        .unwrap_or_else(|| error("Access token not provided", 1));
 
-    let connection = open_datasets(&config_dir).unwrap();
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
 
+    #[allow(unused_must_use)]
     let datasets = if all {
         list_datasets(&connection).unwrap()
     } else if datasets.len() == 0 {
-        new_dataset(&connection, "default").unwrap();
+        new_dataset(&connection, "default");
         vec![String::from("default")]
     } else {
         datasets
     };
 
     for dataset in datasets {
-        let last_sync = get_last_sync(&connection, &dataset).unwrap().unwrap();
+        let last_sync = get_last_sync(&connection, &dataset)
+            .expect("Error communicating with SQLite")
+            .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
+
+        sync_dataset(
+            &connection,
+            &dataset,
+            last_sync,
+            VideogameId(1386),
+            Some("GA"),
+            &auth,
+        )
+        .expect("Error communicating with SQLite");
+
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_else(|_| error("System time is before the Unix epoch!", 2))
+            .as_secs();
+
+        update_last_sync(&connection, &dataset, current_time)
+            .expect("Error communicating with SQLite");
     }
 }

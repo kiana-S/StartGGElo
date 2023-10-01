@@ -2,6 +2,8 @@ use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 
 pub mod search_games;
 pub use search_games::*;
@@ -61,7 +63,7 @@ pub struct EntrantId(pub u64);
 #[cynic(graphql_type = "ID")]
 pub struct PlayerId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone)]
 pub struct Timestamp(pub u64);
 
 // Query machinery
@@ -75,19 +77,28 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 // Generic function for running start.gg queries
 pub fn run_query<Builder, Vars>(vars: Vars, auth_token: &str) -> Option<Builder::Unwrapped>
 where
-    Builder: Debug,
+    Vars: Clone,
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
     for<'de> Builder: Deserialize<'de>,
 {
     use cynic::http::ReqwestBlockingExt;
 
-    let query = Builder::build(vars);
-
-    let response = reqwest::blocking::Client::new()
+    let mut response = reqwest::blocking::Client::new()
         .post("https://api.start.gg/gql/alpha")
         .header("Authorization", String::from("Bearer ") + auth_token)
-        .run_graphql(query);
+        .run_graphql(Builder::build(vars.clone()));
 
-    Builder::unwrap_response(response.unwrap())
+    for _ in 1..10 {
+        sleep(Duration::from_secs(2));
+        response = reqwest::blocking::Client::new()
+            .post("https://api.start.gg/gql/alpha")
+            .header("Authorization", String::from("Bearer ") + auth_token)
+            .run_graphql(Builder::build(vars.clone()));
+        if response.is_ok() {
+            break;
+        }
+    }
+
+    Builder::unwrap_response(response.ok()?)
 }

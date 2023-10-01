@@ -72,7 +72,7 @@ pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()>
     connection.execute(query)
 }
 
-pub fn get_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<Option<u64>> {
+pub fn get_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<Option<Timestamp>> {
     let query = "SELECT last_sync FROM datasets WHERE name = ?";
 
     Ok(connection
@@ -81,7 +81,8 @@ pub fn get_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<O
         .bind((1, dataset))?
         .map(|x| x.map(|r| r.read::<i64, _>("last_sync").to_owned() as u64))
         .next()
-        .and_then(Result::ok))
+        .and_then(Result::ok)
+        .map(Timestamp))
 }
 
 pub fn update_last_sync(connection: &Connection, dataset: &str, sync: u64) -> sqlite::Result<()> {

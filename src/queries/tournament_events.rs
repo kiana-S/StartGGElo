@@ -5,14 +5,16 @@ use schema::schema;
 
 // Variables
 
-#[derive(cynic::QueryVariables, Debug)]
-pub struct TournamentEventsVars {
+#[derive(cynic::QueryVariables, Debug, Clone)]
+pub struct TournamentEventsVars<'a> {
     // HACK: This should really be an optional variable, but there seems to be a
     // server-side bug that completely breaks everything when this isn't passed.
     // We can use a dummy value of 1 when we don't want to filter by time.
-    pub last_query: Timestamp,
+    pub last_sync: Timestamp,
     pub game_id: VideogameId,
     pub page: i32,
+
+    pub state: Option<&'a str>,
 }
 
 // Query
@@ -22,12 +24,13 @@ pub struct TournamentEventsVars {
 pub struct TournamentEvents {
     #[arguments(query: {
         page: $page,
-        perPage: 300,
+        perPage: 250,
         sortBy: "endAt asc",
         filter: {
             past: true,
-            afterDate: $last_query,
+            afterDate: $last_sync,
             videogameIds: [$game_id],
+            addrState: $state
         }})]
     tournaments: Option<TournamentConnection>,
 }
@@ -35,8 +38,14 @@ pub struct TournamentEvents {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentEventsVars")]
 struct TournamentConnection {
+    page_info: Option<PageInfo>,
     #[cynic(flatten)]
     nodes: Vec<Tournament>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+struct PageInfo {
+    total_pages: Option<i32>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -57,32 +66,43 @@ struct Event {
 // Unwrap
 
 #[derive(Debug, Clone)]
+pub struct TournamentEventResponse {
+    pub pages: i32,
+    pub tournaments: Vec<TournamentData>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TournamentData {
     pub name: String,
     pub events: Vec<EventId>,
 }
 
-impl QueryUnwrap<TournamentEventsVars> for TournamentEvents {
-    type Unwrapped = Vec<TournamentData>;
+impl<'a> QueryUnwrap<TournamentEventsVars<'a>> for TournamentEvents {
+    type Unwrapped = TournamentEventResponse;
 
-    fn unwrap_response(response: GraphQlResponse<TournamentEvents>) -> Option<Vec<TournamentData>> {
-        Some(
-            response
-                .data?
-                .tournaments?
-                .nodes
-                .into_iter()
-                .filter_map(|tour| {
-                    Some(TournamentData {
-                        name: tour.name?,
-                        events: tour
-                            .events
-                            .into_iter()
-                            .filter_map(|event| event.id)
-                            .collect(),
-                    })
+    fn unwrap_response(
+        response: GraphQlResponse<TournamentEvents>,
+    ) -> Option<TournamentEventResponse> {
+        let response_tournaments = response.data?.tournaments?;
+
+        let tournaments = response_tournaments
+            .nodes
+            .into_iter()
+            .filter_map(|tour| {
+                Some(TournamentData {
+                    name: tour.name?,
+                    events: tour
+                        .events
+                        .into_iter()
+                        .filter_map(|event| event.id)
+                        .collect(),
                 })
-                .collect(),
-        )
+            })
+            .collect::<Vec<_>>();
+
+        Some(TournamentEventResponse {
+            pages: response_tournaments.page_info?.total_pages?,
+            tournaments,
+        })
     }
 }

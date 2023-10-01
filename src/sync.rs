@@ -1,4 +1,8 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use crate::datasets::*;
+use crate::error;
 use crate::queries::*;
 use sqlite::*;
 
@@ -33,13 +37,105 @@ fn adjust_ratings(ratings: Teams<&mut f64>, winner: usize) {
 // Extract set data
 
 fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
-    let sets = run_query::<EventSets, _>(EventSetsVars {
-        event,
-        sets_page: 1,
-    });
+    sleep(Duration::from_millis(700));
+
+    let sets_response = run_query::<EventSets, _>(EventSetsVars { event, page: 1 }, auth)?;
+
+    let pages = sets_response.pages;
+    if pages == 0 {
+        Some(vec![])
+    } else if pages == 1 {
+        Some(sets_response.sets)
+    } else {
+        println!("  (Page 1)");
+
+        let mut sets = sets_response.sets;
+
+        for page in 2..=pages {
+            println!("  (Page {})", page);
+
+            let next_response = run_query::<EventSets, _>(
+                EventSetsVars {
+                    event,
+                    page: page as i32,
+                },
+                auth,
+            )?;
+
+            sleep(Duration::from_millis(700));
+
+            sets.extend(next_response.sets);
+        }
+
+        Some(sets)
+    }
 }
 
-/*
+fn get_tournament_events(
+    last_sync: Timestamp,
+    game_id: VideogameId,
+    state: Option<&str>,
+    auth: &str,
+) -> Option<Vec<EventId>> {
+    println!("Accessing tournaments...");
+
+    let tour_response = run_query::<TournamentEvents, _>(
+        TournamentEventsVars {
+            last_sync,
+            game_id,
+            state,
+            page: 1,
+        },
+        auth,
+    )?;
+
+    let pages = tour_response.pages;
+    if pages == 0 {
+        Some(vec![])
+    } else if pages == 1 {
+        Some(
+            tour_response
+                .tournaments
+                .into_iter()
+                .flat_map(|tour| tour.events)
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        println!("  (Page 1)");
+
+        let mut tournaments = tour_response
+            .tournaments
+            .into_iter()
+            .flat_map(|tour| tour.events)
+            .collect::<Vec<_>>();
+
+        for page in 2..=pages {
+            println!("  (Page {})", page);
+
+            let next_response = run_query::<TournamentEvents, _>(
+                TournamentEventsVars {
+                    last_sync,
+                    game_id,
+                    state,
+                    page,
+                },
+                auth,
+            )?;
+
+            tournaments.extend(
+                next_response
+                    .tournaments
+                    .into_iter()
+                    .flat_map(|tour| tour.events),
+            );
+        }
+
+        Some(tournaments)
+    }
+}
+
+// Dataset syncing
+
 fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> sqlite::Result<()> {
     let players_data = results.teams;
     add_players(connection, dataset, &players_data)?;
@@ -54,14 +150,33 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
     update_ratings(connection, dataset, elos)
 }
 
-pub fn update_from_tournament(
+pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
-    results: TournamentData,
+    last_sync: Timestamp,
+    game_id: VideogameId,
+    state: Option<&str>,
+    auth: &str,
 ) -> sqlite::Result<()> {
-    results
-        .sets
-        .into_iter()
-        .try_for_each(|set| update_from_set(connection, dataset, set))
+    let events = get_tournament_events(last_sync, game_id, state, auth)
+        .unwrap_or_else(|| error("Could not access start.gg", 1));
+
+    connection.execute("BEGIN;")?;
+
+    let num_events = events.len();
+    for (i, event) in events.into_iter().enumerate() {
+        println!(
+            "Accessing sets from event ID {}... ({}/{})",
+            event.0, i, num_events
+        );
+
+        let sets =
+            get_event_sets(event, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
+
+        println!("  Updating ratings from event...");
+
+        sets.into_iter()
+            .try_for_each(|set| update_from_set(connection, dataset, set))?;
+    }
+    connection.execute("COMMIT;")
 }
-*/

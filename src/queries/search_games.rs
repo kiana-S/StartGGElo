@@ -4,7 +4,7 @@ use schema::schema;
 
 // Variables
 
-#[derive(cynic::QueryVariables)]
+#[derive(cynic::QueryVariables, Clone)]
 pub struct VideogameSearchVars<'a> {
     pub name: &'a str,
 }
