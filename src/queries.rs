@@ -90,14 +90,14 @@ where
         .run_graphql(Builder::build(vars));
 
     for _ in 1..10 {
+        if response.is_ok() {
+            break;
+        }
         sleep(Duration::from_secs(2));
         response = reqwest::blocking::Client::new()
             .post("https://api.start.gg/gql/alpha")
             .header("Authorization", String::from("Bearer ") + auth_token)
             .run_graphql(Builder::build(vars));
-        if response.is_ok() {
-            break;
-        }
     }
 
     Builder::unwrap_response(response.ok()?)
