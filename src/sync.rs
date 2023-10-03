@@ -71,7 +71,7 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     }
 }
 
-fn get_tournament_events(dataset_config: &DatasetConfig, auth: &str) -> Option<Vec<EventId>> {
+fn get_tournament_events(dataset_config: &DatasetMetadata, auth: &str) -> Option<Vec<EventId>> {
     println!("Accessing tournaments...");
 
     let tour_response = run_query::<TournamentEvents, _>(
@@ -148,7 +148,7 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
 pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
-    dataset_config: DatasetConfig,
+    dataset_config: DatasetMetadata,
     auth: &str,
 ) -> sqlite::Result<()> {
     let events = get_tournament_events(&dataset_config, auth)

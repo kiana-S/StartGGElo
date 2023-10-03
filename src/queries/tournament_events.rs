@@ -11,10 +11,10 @@ pub struct TournamentEventsVars<'a> {
     // server-side bug that completely breaks everything when this isn't passed.
     // We can use a dummy value of 1 when we don't want to filter by time.
     pub last_sync: Timestamp,
-    pub game_id: VideogameId,
-    pub page: i32,
 
+    pub game_id: VideogameId,
     pub state: Option<&'a str>,
+    pub page: i32,
 }
 
 // Query

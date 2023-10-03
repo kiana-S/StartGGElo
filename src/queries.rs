@@ -14,6 +14,7 @@ pub use event_sets::*;
 pub mod player_info;
 pub use player_info::*;
 
+use crate::error;
 use schema::schema;
 
 // Auth key
@@ -24,7 +25,7 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
 
     match var("AUTH_TOKEN") {
         Ok(key) => Some(key),
-        Err(VarError::NotUnicode(_)) => panic!("Invalid authorization key"),
+        Err(VarError::NotUnicode(_)) => error("Invalid authorization key", 2),
         Err(VarError::NotPresent) => {
             let mut auth_file = config_dir.to_owned();
             auth_file.push("ggelo");
@@ -77,9 +78,8 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 // Generic function for running start.gg queries
 pub fn run_query<Builder, Vars>(vars: Vars, auth_token: &str) -> Option<Builder::Unwrapped>
 where
-    Vars: Copy,
+    Vars: Copy + Serialize,
     Builder: QueryUnwrap<Vars>,
-    Vars: Serialize,
     for<'de> Builder: Deserialize<'de>,
 {
     use cynic::http::ReqwestBlockingExt;

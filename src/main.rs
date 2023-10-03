@@ -3,7 +3,6 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::exit;
 
 mod queries;
 use queries::*;
@@ -13,11 +12,13 @@ mod sync;
 use sync::*;
 
 pub fn error(msg: &str, code: i32) -> ! {
+    use std::process::exit;
     println!("\nERROR: {}", msg);
     exit(code)
 }
 
 pub fn issue(msg: &str, code: i32) -> ! {
+    use std::process::exit;
     println!("\n{}", msg);
     exit(code)
 }
@@ -119,7 +120,14 @@ fn dataset_list() {
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
     let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
-    println!("{:?}", datasets);
+    println!();
+    for (name, metadata) in datasets {
+        if let Some(state) = metadata.state {
+            println!("{} - {}, {}", name, metadata.game_name, state);
+        } else {
+            println!("{} - {}", name, metadata.game_name);
+        }
+    }
 }
 
 fn read_string() -> String {
@@ -181,7 +189,7 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
     new_dataset(
         &connection,
         &name,
-        DatasetConfig {
+        DatasetMetadata {
             last_sync: Timestamp(1),
             game_id,
             game_name,
@@ -216,7 +224,7 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
 
     #[allow(unused_must_use)]
     let datasets = if all {
-        list_datasets(&connection).unwrap()
+        list_dataset_names(&connection).unwrap()
     } else if datasets.len() == 0 {
         print!("No datasets provided; create a new one? (y/n) ");
         if read_string() == "y" {
@@ -228,14 +236,13 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     };
 
     for dataset in datasets {
-        let dataset_config = get_dataset_config(&connection, &dataset)
+        let dataset_config = get_metadata(&connection, &dataset)
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
         sync_dataset(&connection, &dataset, dataset_config, &auth).unwrap_or_else(|err| {
             connection.execute("ROLLBACK;").unwrap();
-            panic!("{:?}", err);
-            // error("Error communicating with SQLite", 2)
+            error("Error communicating with SQLite", 2)
         });
 
         update_last_sync(&connection, &dataset).expect("Error communicating with SQLite");

@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-pub struct DatasetConfig {
+pub struct DatasetMetadata {
     pub last_sync: Timestamp,
     pub game_id: VideogameId,
     pub game_name: String,
@@ -48,13 +48,34 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
 
 // TODO: Sanitize dataset names
 
-pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<String>> {
+pub fn list_dataset_names(connection: &Connection) -> sqlite::Result<Vec<String>> {
+    let query = "SELECT name FROM datasets";
+
+    connection
+        .prepare(query)?
+        .into_iter()
+        .map(|r| r.map(|x| x.read::<&str, _>("name").to_owned()))
+        .try_collect()
+}
+
+pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, DatasetMetadata)>> {
     let query = "SELECT * FROM datasets";
 
     connection
         .prepare(query)?
         .into_iter()
-        .map(|x| x.map(|r| r.read::<&str, _>("name").to_owned()))
+        .map(|r| {
+            let r_ = r?;
+            Ok((
+                r_.read::<&str, _>("name").to_owned(),
+                DatasetMetadata {
+                    last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
+                    game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
+                    game_name: r_.read::<&str, _>("game_name").to_owned(),
+                    state: r_.read::<Option<&str>, _>("state").map(String::from),
+                },
+            ))
+        })
         .try_collect()
 }
 
@@ -71,7 +92,7 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
 pub fn new_dataset(
     connection: &Connection,
     dataset: &str,
-    config: DatasetConfig,
+    config: DatasetMetadata,
 ) -> sqlite::Result<()> {
     let query1 = r#"INSERT INTO datasets (name, game_id, game_name, state)
                         VALUES (?, ?, ?, ?)"#;
@@ -97,11 +118,11 @@ pub fn new_dataset(
     connection.execute(query2)
 }
 
-pub fn get_dataset_config(
+pub fn get_metadata(
     connection: &Connection,
     dataset: &str,
-) -> sqlite::Result<Option<DatasetConfig>> {
-    let query = "SELECT last_sync, game_id, state FROM datasets WHERE name = ?";
+) -> sqlite::Result<Option<DatasetMetadata>> {
+    let query = "SELECT last_sync, game_id, game_name, state FROM datasets WHERE name = ?";
 
     Ok(connection
         .prepare(query)?
@@ -110,7 +131,7 @@ pub fn get_dataset_config(
         .next()
         .map(|r| {
             let r_ = r?;
-            Ok(DatasetConfig {
+            Ok(DatasetMetadata {
                 last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                 game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
                 game_name: r_.read::<&str, _>("game_name").to_owned(),
