@@ -9,6 +9,7 @@ use std::time::SystemTime;
 pub struct DatasetConfig {
     pub last_sync: Timestamp,
     pub game_id: VideogameId,
+    pub game_name: String,
     pub state: Option<String>,
 }
 
@@ -36,6 +37,7 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
             name TEXT UNIQUE NOT NULL,
             last_sync INTEGER DEFAULT 1,
             game_id INTEGER NOT NULL,
+            game_name TEXT NOT NULL,
             state TEXT
         ) STRICT;";
 
@@ -71,7 +73,8 @@ pub fn new_dataset(
     dataset: &str,
     config: DatasetConfig,
 ) -> sqlite::Result<()> {
-    let query1 = r#"INSERT INTO datasets (name, game_id, state) VALUES (?, ?, ?)"#;
+    let query1 = r#"INSERT INTO datasets (name, game_id, game_name, state)
+                        VALUES (?, ?, ?, ?)"#;
     let query2 = format!(
         r#" CREATE TABLE "dataset_{0}" (
             id INTEGER PRIMARY KEY,
@@ -87,7 +90,8 @@ pub fn new_dataset(
         .into_iter()
         .bind((1, dataset))?
         .bind((2, config.game_id.0 as i64))?
-        .bind((3, config.state.as_deref()))?
+        .bind((3, &config.game_name[..]))?
+        .bind((4, config.state.as_deref()))?
         .try_for_each(|x| x.map(|_| ()))?;
 
     connection.execute(query2)
@@ -109,6 +113,7 @@ pub fn get_dataset_config(
             Ok(DatasetConfig {
                 last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                 game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
+                game_name: r_.read::<&str, _>("game_name").to_owned(),
                 state: r_.read::<Option<&str>, _>("state").map(String::from),
             })
         })

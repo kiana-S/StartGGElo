@@ -171,7 +171,10 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
         error("Out of range!", 1);
     }
 
-    let game_id = games[index].id;
+    let VideogameData {
+        id: game_id,
+        name: game_name,
+    } = games[index].clone();
 
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
@@ -181,6 +184,7 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
         DatasetConfig {
             last_sync: Timestamp(1),
             game_id,
+            game_name,
             state: None,
         },
     )
