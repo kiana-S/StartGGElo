@@ -4,7 +4,7 @@ use schema::schema;
 
 // Variables
 
-#[derive(cynic::QueryVariables, Debug, Clone)]
+#[derive(cynic::QueryVariables, Debug, Copy, Clone)]
 pub struct PlayerInfoVars {
     pub id: PlayerId,
 }

@@ -77,7 +77,7 @@ pub trait QueryUnwrap<Vars>: 'static + QueryBuilder<Vars> {
 // Generic function for running start.gg queries
 pub fn run_query<Builder, Vars>(vars: Vars, auth_token: &str) -> Option<Builder::Unwrapped>
 where
-    Vars: Clone,
+    Vars: Copy,
     Builder: QueryUnwrap<Vars>,
     Vars: Serialize,
     for<'de> Builder: Deserialize<'de>,
@@ -87,14 +87,14 @@ where
     let mut response = reqwest::blocking::Client::new()
         .post("https://api.start.gg/gql/alpha")
         .header("Authorization", String::from("Bearer ") + auth_token)
-        .run_graphql(Builder::build(vars.clone()));
+        .run_graphql(Builder::build(vars));
 
     for _ in 1..10 {
         sleep(Duration::from_secs(2));
         response = reqwest::blocking::Client::new()
             .post("https://api.start.gg/gql/alpha")
             .header("Authorization", String::from("Bearer ") + auth_token)
-            .run_graphql(Builder::build(vars.clone()));
+            .run_graphql(Builder::build(vars));
         if response.is_ok() {
             break;
         }

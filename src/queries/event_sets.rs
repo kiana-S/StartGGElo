@@ -6,7 +6,7 @@ pub type Teams<T> = Vec<Vec<T>>;
 
 // Variables
 
-#[derive(cynic::QueryVariables, Debug, Clone)]
+#[derive(cynic::QueryVariables, Debug, Copy, Clone)]
 pub struct EventSetsVars {
     pub event: EventId,
     pub page: i32,

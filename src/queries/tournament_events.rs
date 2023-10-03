@@ -5,7 +5,7 @@ use schema::schema;
 
 // Variables
 
-#[derive(cynic::QueryVariables, Debug, Clone)]
+#[derive(cynic::QueryVariables, Debug, Copy, Clone)]
 pub struct TournamentEventsVars<'a> {
     // HACK: This should really be an optional variable, but there seems to be a
     // server-side bug that completely breaks everything when this isn't passed.
