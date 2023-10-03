@@ -71,19 +71,14 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     }
 }
 
-fn get_tournament_events(
-    last_sync: Timestamp,
-    game_id: VideogameId,
-    state: Option<&str>,
-    auth: &str,
-) -> Option<Vec<EventId>> {
+fn get_tournament_events(dataset_config: &DatasetConfig, auth: &str) -> Option<Vec<EventId>> {
     println!("Accessing tournaments...");
 
     let tour_response = run_query::<TournamentEvents, _>(
         TournamentEventsVars {
-            last_sync,
-            game_id,
-            state,
+            last_sync: dataset_config.last_sync,
+            game_id: dataset_config.game_id,
+            state: dataset_config.state.as_deref(),
             page: 1,
         },
         auth,
@@ -114,9 +109,9 @@ fn get_tournament_events(
 
             let next_response = run_query::<TournamentEvents, _>(
                 TournamentEventsVars {
-                    last_sync,
-                    game_id,
-                    state,
+                    last_sync: dataset_config.last_sync,
+                    game_id: dataset_config.game_id,
+                    state: dataset_config.state.as_deref(),
                     page,
                 },
                 auth,
@@ -153,12 +148,10 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
 pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
-    last_sync: Timestamp,
-    game_id: VideogameId,
-    state: Option<&str>,
+    dataset_config: DatasetConfig,
     auth: &str,
 ) -> sqlite::Result<()> {
-    let events = get_tournament_events(last_sync, game_id, state, auth)
+    let events = get_tournament_events(&dataset_config, auth)
         .unwrap_or_else(|| error("Could not access start.gg", 1));
 
     connection.execute("BEGIN;")?;
@@ -170,8 +163,10 @@ pub fn sync_dataset(
             event.0, i, num_events
         );
 
-        let sets =
-            get_event_sets(event, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
+        let sets = get_event_sets(event, auth).unwrap_or_else(|| {
+            connection.execute("ROLLBACK;").unwrap();
+            error("Could not access start.gg", 1)
+        });
 
         println!("  Updating ratings from event...");
 

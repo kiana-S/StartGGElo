@@ -4,7 +4,6 @@ use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::exit;
-use std::time::SystemTime;
 
 mod queries;
 use queries::*;
@@ -15,6 +14,11 @@ use sync::*;
 
 pub fn error(msg: &str, code: i32) -> ! {
     println!("\nERROR: {}", msg);
+    exit(code)
+}
+
+pub fn issue(msg: &str, code: i32) -> ! {
+    println!("\n{}", msg);
     exit(code)
 }
 
@@ -69,14 +73,13 @@ dataset was synced."
     )]
     Sync {
         #[arg(
-            group = "datasets",
             help = "The datasets to sync",
             long_help = "A list of datasets to sync.
 If no datasets are given, then the dataset 'default' is synced. This dataset is
 created if it does not already exist."
         )]
         datasets: Vec<String>,
-        #[arg(short, long, group = "datasets", help = "Sync all stored databases")]
+        #[arg(short, long, help = "Sync all stored databases")]
         all: bool,
     },
 }
@@ -100,7 +103,7 @@ fn main() {
         } => dataset_list(),
         Subcommands::Dataset {
             subcommand: DatasetSC::New { name },
-        } => dataset_new(name),
+        } => dataset_new(name, cli.auth_token),
         Subcommands::Dataset {
             subcommand: DatasetSC::Delete { name },
         } => dataset_delete(name),
@@ -121,24 +124,67 @@ fn dataset_list() {
 
 fn read_string() -> String {
     let mut line = String::new();
-    io::stdout().flush().expect("Could not access stdout");
+    io::stdout()
+        .flush()
+        .unwrap_or_else(|_| error("Could not access stdout", 2));
     io::stdin()
         .read_line(&mut line)
-        .expect("Could not read from stdin");
+        .unwrap_or_else(|_| error("Could not read from stdin", 2));
     line.trim().to_owned()
 }
 
-fn dataset_new(name: Option<String>) {
+fn dataset_new(name: Option<String>, auth_token: Option<String>) {
     let config_dir = dirs::config_dir().expect("Could not determine config directory");
+
+    let auth = auth_token
+        .or_else(|| get_auth_token(&config_dir))
+        .unwrap_or_else(|| error("Access token not provided", 1));
 
     let name = name.unwrap_or_else(|| {
         print!("Name of new dataset: ");
         read_string()
     });
 
+    print!("Search games: ");
+    let games = run_query::<VideogameSearch, _>(
+        VideogameSearchVars {
+            name: &read_string(),
+        },
+        &auth,
+    )
+    .unwrap_or_else(|| error("Could not access start.gg", 1));
+
+    if games.is_empty() {
+        issue("No games found!", 0);
+    }
+
+    println!("\nSearch results:");
+    for (i, game) in games.iter().enumerate() {
+        println!("{} - {}", i, game.name);
+    }
+
+    print!("\nGame to track ratings for (0-{}): ", games.len() - 1);
+    let index = read_string()
+        .parse::<usize>()
+        .unwrap_or_else(|_| error("Not an integer", 1));
+    if index >= games.len() {
+        error("Out of range!", 1);
+    }
+
+    let game_id = games[index].id;
+
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
-    new_dataset(&connection, &name).expect("Error communicating with SQLite");
+    new_dataset(
+        &connection,
+        &name,
+        DatasetConfig {
+            last_sync: Timestamp(1),
+            game_id,
+            state: None,
+        },
+    )
+    .expect("Error communicating with SQLite");
 }
 
 fn dataset_delete(name: Option<String>) {
@@ -168,33 +214,26 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let datasets = if all {
         list_datasets(&connection).unwrap()
     } else if datasets.len() == 0 {
-        new_dataset(&connection, "default");
+        print!("No datasets provided; create a new one? (y/n) ");
+        if read_string() == "y" {
+            dataset_new(Some(String::from("default")), Some(auth.clone()));
+        }
         vec![String::from("default")]
     } else {
         datasets
     };
 
     for dataset in datasets {
-        let last_sync = get_last_sync(&connection, &dataset)
+        let dataset_config = get_dataset_config(&connection, &dataset)
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(
-            &connection,
-            &dataset,
-            last_sync,
-            VideogameId(1386),
-            Some("GA"),
-            &auth,
-        )
-        .expect("Error communicating with SQLite");
+        sync_dataset(&connection, &dataset, dataset_config, &auth).unwrap_or_else(|err| {
+            connection.execute("ROLLBACK;").unwrap();
+            panic!("{:?}", err);
+            // error("Error communicating with SQLite", 2)
+        });
 
-        let current_time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| error("System time is before the Unix epoch!", 2))
-            .as_secs();
-
-        update_last_sync(&connection, &dataset, current_time)
-            .expect("Error communicating with SQLite");
+        update_last_sync(&connection, &dataset).expect("Error communicating with SQLite");
     }
 }

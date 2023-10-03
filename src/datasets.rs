@@ -1,8 +1,16 @@
+use crate::error;
 use crate::queries::*;
 use sqlite::*;
 use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+pub struct DatasetConfig {
+    pub last_sync: Timestamp,
+    pub game_id: VideogameId,
+    pub state: Option<String>,
+}
 
 /// Return the path to the datasets file.
 fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
@@ -26,7 +34,9 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let query = "
         CREATE TABLE IF NOT EXISTS datasets (
             name TEXT UNIQUE NOT NULL,
-            last_sync INTEGER DEFAULT 1
+            last_sync INTEGER DEFAULT 1,
+            game_id INTEGER NOT NULL,
+            state TEXT
         ) STRICT;";
 
     let connection = sqlite::open(path)?;
@@ -56,11 +66,14 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
     connection.execute(query)
 }
 
-pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
-    let query = format!(
-        r#"INSERT INTO datasets (name) VALUES ('{0}');
-
-        CREATE TABLE IF NOT EXISTS "dataset_{0}" (
+pub fn new_dataset(
+    connection: &Connection,
+    dataset: &str,
+    config: DatasetConfig,
+) -> sqlite::Result<()> {
+    let query1 = r#"INSERT INTO datasets (name, game_id, state) VALUES (?, ?, ?)"#;
+    let query2 = format!(
+        r#" CREATE TABLE "dataset_{0}" (
             id INTEGER PRIMARY KEY,
             name TEXT,
             prefix TEXT,
@@ -69,29 +82,51 @@ pub fn new_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()>
         dataset
     );
 
-    connection.execute(query)
+    connection
+        .prepare(query1)?
+        .into_iter()
+        .bind((1, dataset))?
+        .bind((2, config.game_id.0 as i64))?
+        .bind((3, config.state.as_deref()))?
+        .try_for_each(|x| x.map(|_| ()))?;
+
+    connection.execute(query2)
 }
 
-pub fn get_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<Option<Timestamp>> {
-    let query = "SELECT last_sync FROM datasets WHERE name = ?";
+pub fn get_dataset_config(
+    connection: &Connection,
+    dataset: &str,
+) -> sqlite::Result<Option<DatasetConfig>> {
+    let query = "SELECT last_sync, game_id, state FROM datasets WHERE name = ?";
 
     Ok(connection
         .prepare(query)?
         .into_iter()
         .bind((1, dataset))?
-        .map(|x| x.map(|r| r.read::<i64, _>("last_sync").to_owned() as u64))
         .next()
-        .and_then(Result::ok)
-        .map(Timestamp))
+        .map(|r| {
+            let r_ = r?;
+            Ok(DatasetConfig {
+                last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
+                game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
+                state: r_.read::<Option<&str>, _>("state").map(String::from),
+            })
+        })
+        .and_then(Result::ok))
 }
 
-pub fn update_last_sync(connection: &Connection, dataset: &str, sync: u64) -> sqlite::Result<()> {
+pub fn update_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
     let query = "UPDATE datasets SET last_sync = :sync WHERE name = :dataset";
+
+    let current_time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_else(|_| error("System time is before the Unix epoch (1970)!", 2))
+        .as_secs();
 
     connection
         .prepare(query)?
         .into_iter()
-        .bind((":sync", sync as i64))?
+        .bind((":sync", current_time as i64))?
         .bind((":dataset", dataset))?
         .try_for_each(|x| x.map(|_| ()))
 }

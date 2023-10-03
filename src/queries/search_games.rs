@@ -4,7 +4,7 @@ use schema::schema;
 
 // Variables
 
-#[derive(cynic::QueryVariables, Clone)]
+#[derive(cynic::QueryVariables, Debug, Clone)]
 pub struct VideogameSearchVars<'a> {
     pub name: &'a str,
 }
@@ -14,7 +14,7 @@ pub struct VideogameSearchVars<'a> {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(graphql_type = "Query", variables = "VideogameSearchVars")]
 pub struct VideogameSearch {
-    #[arguments(query: { filter: { name: $name }, page: 1, perPage: 10 })]
+    #[arguments(query: { filter: { name: $name }, page: 1, perPage: 8 })]
     videogames: Option<VideogameConnection>,
 }
 
