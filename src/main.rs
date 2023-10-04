@@ -3,6 +3,7 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::exit;
 
 mod queries;
 use queries::*;
@@ -12,13 +13,11 @@ mod sync;
 use sync::*;
 
 pub fn error(msg: &str, code: i32) -> ! {
-    use std::process::exit;
     println!("\nERROR: {}", msg);
     exit(code)
 }
 
 pub fn issue(msg: &str, code: i32) -> ! {
-    use std::process::exit;
     println!("\n{}", msg);
     exit(code)
 }
@@ -222,15 +221,25 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
 
+    let all_datasets = list_dataset_names(&connection).unwrap();
+
     #[allow(unused_must_use)]
     let datasets = if all {
-        list_dataset_names(&connection).unwrap()
+        all_datasets
     } else if datasets.len() == 0 {
-        print!("No datasets provided; create a new one? (y/n) ");
-        if read_string() == "y" {
-            dataset_new(Some(String::from("default")), Some(auth.clone()));
+        if all_datasets.len() == 0 {
+            print!("No datasets exist; create one? (y/n) ");
+            if let Some('y') = read_string().chars().next() {
+                dataset_new(Some(String::from("default")), Some(auth.clone()));
+                vec![String::from("default")]
+            } else {
+                error("No datasets specified and no default dataset", 1)
+            }
+        } else if all_datasets.iter().any(|x| x == "default") {
+            vec![String::from("default")]
+        } else {
+            error("No datasets specified and no default dataset", 1);
         }
-        vec![String::from("default")]
     } else {
         datasets
     };
@@ -240,7 +249,7 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(&connection, &dataset, dataset_config, &auth).unwrap_or_else(|err| {
+        sync_dataset(&connection, &dataset, dataset_config, &auth).unwrap_or_else(|_| {
             connection.execute("ROLLBACK;").unwrap();
             error("Error communicating with SQLite", 2)
         });
