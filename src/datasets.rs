@@ -8,6 +8,7 @@ use std::time::SystemTime;
 
 pub struct DatasetMetadata {
     pub last_sync: Timestamp,
+
     pub game_id: VideogameId,
     pub game_name: String,
     pub state: Option<String>,
@@ -33,9 +34,11 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let path = datasets_path(config_dir).unwrap();
 
     let query = "
+        PRAGMA foreign_keys = ON;
+
         CREATE TABLE IF NOT EXISTS datasets (
             name TEXT UNIQUE NOT NULL,
-            last_sync INTEGER DEFAULT 1,
+            last_sync INTEGER NOT NULL,
             game_id INTEGER NOT NULL,
             game_name TEXT NOT NULL,
             state TEXT
@@ -82,7 +85,8 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, Dat
 pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
     let query = format!(
         r#"DELETE FROM datasets WHERE name = '{0}';
-        DROP TABLE "dataset_{0}";"#,
+        DROP TABLE "dataset_{0}_players";
+        DROP TABLE "dataset_{0}_network";"#,
         dataset
     );
 
@@ -97,11 +101,25 @@ pub fn new_dataset(
     let query1 = r#"INSERT INTO datasets (name, game_id, game_name, state)
                         VALUES (?, ?, ?, ?)"#;
     let query2 = format!(
-        r#" CREATE TABLE "dataset_{0}" (
+        r#"
+        CREATE TABLE "dataset_{0}_players" (
             id INTEGER PRIMARY KEY,
             name TEXT,
-            prefix TEXT,
-            elo REAL NOT NULL
+            prefix TEXT
+        );
+        CREATE TABLE "dataset_{0}_network" (
+            player_A INTEGER NOT NULL,
+            player_B INTEGER NOT NULL,
+            advantage REAL NOT NULL,
+            sets_A INTEGER NOT NULL,
+            sets_B INTEGER NOT NULL,
+            games_A INTEGER NOT NULL,
+            games_B INTEGER NOT NULL,
+
+            UNIQUE (player_A, player_B),
+            CHECK (player_A < player_B),
+            FOREIGN KEY(player_A, player_B) REFERENCES "dataset_{0}_players"
+                ON DELETE CASCADE
         ) STRICT;"#,
         dataset
     );
@@ -165,7 +183,7 @@ pub fn add_players(
     teams: &Teams<PlayerData>,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"INSERT OR IGNORE INTO "dataset_{}" VALUES (?, ?, ?, 1500)"#,
+        r#"INSERT OR IGNORE INTO "dataset_{}_players" VALUES (?, ?, ?)"#,
         dataset
     );
 
@@ -180,43 +198,160 @@ pub fn add_players(
     })
 }
 
-pub fn get_ratings(
+pub fn get_advantage(
     connection: &Connection,
     dataset: &str,
-    teams: &Teams<PlayerData>,
-) -> sqlite::Result<Teams<(PlayerId, f64)>> {
-    let query = format!(r#"SELECT id, elo FROM "dataset_{}" WHERE id = ?"#, dataset);
+    player1: PlayerId,
+    player2: PlayerId,
+) -> sqlite::Result<f64> {
+    if player1 == player2 {
+        return Ok(0.0);
+    }
 
-    teams
-        .iter()
-        .map(|team| {
-            team.iter()
-                .map(|data| {
-                    let mut statement = connection.prepare(&query)?;
-                    statement.bind((1, data.id.0 as i64))?;
-                    statement.next()?;
-                    Ok((data.id, statement.read::<f64, _>("elo")?))
-                })
-                .try_collect()
+    let query = format!(
+        r#"SELECT iif(:a > :b, -advantage, advantage) FROM "dataset_{}_network"
+            WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((":a", player1.0 as i64))?;
+    statement.bind((":b", player2.0 as i64))?;
+    statement.next()?;
+    statement.read::<f64, _>("advantage")
+}
+
+pub fn adjust_advantage(
+    connection: &Connection,
+    dataset: &str,
+    player1: PlayerId,
+    player2: PlayerId,
+    adjust: f64,
+) -> sqlite::Result<()> {
+    let query = format!(
+        r#"UPDATE "dataset_{}_network"
+            SET advantage = advantage + iif(:a > :b, -:v, :v)
+            WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((":a", player1.0 as i64))?;
+    statement.bind((":b", player2.0 as i64))?;
+    statement.bind((":v", adjust))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))
+}
+
+pub fn adjust_advantages(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+    adjust: f64,
+) -> sqlite::Result<()> {
+    let query = format!(
+        r#"UPDATE "dataset_{}_network"
+            SET advantage = advantage + iif(:pl = player_A, -:v, :v)
+            WHERE player_A = :pl OR player_B = :pl"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((":pl", player.0 as i64))?;
+    statement.bind((":v", adjust))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))
+}
+
+pub fn get_edges(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+) -> sqlite::Result<Vec<(PlayerId, f64)>> {
+    let query = format!(
+        r#"SELECT iif(:pl = player_B, player_A, player_B) AS id, iif(:pl = player_B, -advantage, advantage) AS advantage
+            FROM "dataset_{}_network"
+            WHERE player_A = :pl OR player_B = :pl"#,
+        dataset
+    );
+
+    connection
+        .prepare(&query)?
+        .into_iter()
+        .bind((":pl", player.0 as i64))?
+        .map(|r| {
+            let r_ = r?;
+            Ok((
+                PlayerId(r_.read::<i64, _>("id") as u64),
+                r_.read::<f64, _>("advantage"),
+            ))
         })
         .try_collect()
 }
 
-pub fn update_ratings(
+pub fn get_path_advantage(
     connection: &Connection,
     dataset: &str,
-    elos: Teams<(PlayerId, f64)>,
-) -> sqlite::Result<()> {
-    let query = format!(
-        r#"UPDATE "dataset_{}" SET elo = :elo WHERE id = :id"#,
-        dataset
-    );
-    elos.into_iter().try_for_each(|team| {
-        team.into_iter().try_for_each(|(id, elo)| {
-            let mut statement = connection.prepare(&query)?;
-            statement.bind((":elo", elo))?;
-            statement.bind((":id", id.0 as i64))?;
-            statement.into_iter().try_for_each(|x| x.map(|_| ()))
-        })
+    players: &[PlayerId],
+) -> sqlite::Result<f64> {
+    players.windows(2).try_fold(0.0, |acc, [a, b]| {
+        Ok(acc + get_advantage(connection, dataset, *a, *b)?)
     })
+}
+
+pub fn hypothetical_advantage(
+    connection: &Connection,
+    dataset: &str,
+    player1: PlayerId,
+    player2: PlayerId,
+) -> sqlite::Result<f64> {
+    if player1 == player2 {
+        return Ok(0.0);
+    }
+
+    let mut paths: Vec<Vec<(Vec<PlayerId>, f64)>> = vec![vec![(vec![player1], 0.0)]];
+
+    for _ in 2..=6 {
+        let new_paths = paths.last().unwrap().into_iter().cloned().try_fold(
+            Vec::new(),
+            |mut acc, (path, adv)| {
+                acc.extend(
+                    get_edges(connection, dataset, *path.last().unwrap())?
+                        .into_iter()
+                        .map(|(x, next_adv)| {
+                            let mut path = path.clone();
+                            path.extend_one(x);
+                            (path, adv + next_adv)
+                        }),
+                );
+                Ok(acc)
+            },
+        )?;
+        paths.extend_one(new_paths);
+    }
+
+    let mut shortest_len = 0;
+
+    Ok(paths[1..]
+        .into_iter()
+        .enumerate()
+        .map(|(i, ps)| {
+            let num_ps = ps.len();
+            if num_ps == 0 {
+                return 0.0;
+            }
+            if shortest_len == 0 {
+                shortest_len = i + 1;
+            }
+            ps.into_iter()
+                .filter_map(|(path, adv)| {
+                    if *path.last().unwrap() == player2 {
+                        Some(adv)
+                    } else {
+                        None
+                    }
+                })
+                .sum::<f64>()
+                / num_ps as f64
+                * (0.5_f64.powi((i - shortest_len) as i32))
+        })
+        .sum())
 }

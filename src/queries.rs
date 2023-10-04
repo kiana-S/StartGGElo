@@ -52,19 +52,19 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
 #[cynic(graphql_type = "ID")]
 pub struct VideogameId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cynic(graphql_type = "ID")]
 pub struct EventId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cynic(graphql_type = "ID")]
 pub struct EntrantId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cynic(graphql_type = "ID")]
 pub struct PlayerId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Timestamp(pub u64);
 
 // Query machinery
@@ -89,6 +89,7 @@ where
         .header("Authorization", String::from("Bearer ") + auth_token)
         .run_graphql(Builder::build(vars));
 
+    // If query fails to reach server, retry up to 10 times
     for _ in 1..10 {
         if response.is_ok() {
             break;

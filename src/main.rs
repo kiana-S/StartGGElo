@@ -1,4 +1,5 @@
 #![feature(iterator_try_collect)]
+#![feature(extend_one)]
 
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
@@ -51,7 +52,7 @@ AUTH_TOKEN, or in a text file '<CONFIG_DIR>/auth.txt'."
         value_name = "DIR",
         global = true,
         help = "Config directory",
-        long_help = "This option overrides the default config directory.
+        long_help = "This flag overrides the default config directory.
 If this directory does not exist, it will be created and a database file will
 be initialized within it."
     )]
@@ -67,9 +68,9 @@ enum Subcommands {
     },
     #[command(
         about = "Sync player ratings",
-        long_about = "Pull recent tournament data off of start.gg and use it to update each player's
-stored ratings. This command will automatically keep track of the last time each
-dataset was synced."
+        long_about = "Pull recent tournament data off of start.gg and use it to
+update the network. This command will automatically keep track of the last time each
+dataset was synced to ensure that each tournament is only accounted for once."
     )]
     Sync {
         #[arg(

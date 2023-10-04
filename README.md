@@ -7,7 +7,8 @@ network of relative advantages between players.
 
 Once the advantage network is generated, StartRNR can be used to predict the
 probability of a player winning a match, generate provably optimal seedings for
-tournaments, and create rankings of players automatically.
+tournaments, inspect the match history of two players, and create competitive
+rankings automatically.
 
 **All of these features work for any game, in any region, without restriction.**
 
