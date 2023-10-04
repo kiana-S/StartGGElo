@@ -1,13 +1,18 @@
 # StartRNR
 
-StartGGElo is a tool for using [start.gg](https://www.start.gg/)'s video game tournament data to
-generate and maintain [Elo ratings](https://wikipedia.org/wiki/Elo_rating_system) for each competitive player.
+**StartRNR** is an implementation of the cutting-edge player rating system known
+as **Relative Network Rating (RNR)** for competitive gaming. It uses
+[start.gg](https://www.start.gg/)'s tournament data to generate and maintain a
+network of relative advantages between players.
 
-Once Elo ratings are generated, StartGGElo can be used to generate ranking lists, predict the
-probability of a player winning a match, generate seedings for future tournaments, and more.
+Once the advantage network is generated, StartRNR can be used to predict the
+probability of a player winning a match, generate provably optimal seedings for
+tournaments, and create rankings of players automatically.
+
+**All of these features work for any game, in any region, without restriction.**
 
 > **Warning**<br>
-> StartRNR is still under development; currently, it only supports generating player ratings.
+> StartRNR is still under development; currently, it only supports generating the network.
 
 ## Installation
 
