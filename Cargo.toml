@@ -1,12 +1,12 @@
 [workspace]
 
 [package]
-name = "ggelo"
+name = "startrnr"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ggelo"
+name = "startrnr"
 path = "src/main.rs"
 
 [dependencies]

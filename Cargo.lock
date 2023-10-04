@@ -471,20 +471,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ggelo"
-version = "0.1.0"
-dependencies = [
- "clap",
- "cynic",
- "cynic-codegen",
- "dirs",
- "reqwest",
- "schema",
- "serde",
- "sqlite",
-]
-
-[[package]]
 name = "gimli"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1153,6 +1139,20 @@ checksum = "f2752c669433e40ebb08fde824146f50d9628aa0b66a3b7fc6be34db82a8063b"
 dependencies = [
  "libc",
  "sqlite3-src",
+]
+
+[[package]]
+name = "startrnr"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "cynic",
+ "cynic-codegen",
+ "dirs",
+ "reqwest",
+ "schema",
+ "serde",
+ "sqlite",
 ]
 
 [[package]]

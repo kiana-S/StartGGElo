@@ -16,7 +16,7 @@ pub struct DatasetMetadata {
 /// Return the path to the datasets file.
 fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
     let mut path = config_dir.to_owned();
-    path.push("ggelo");
+    path.push("startrnr");
 
     // Create datasets path if it doesn't exist
     fs::create_dir_all(&path)?;

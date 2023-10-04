@@ -27,7 +27,7 @@
           craneLib = crane.lib.${system}.overrideToolchain rustToolchain;
 
           commonArgs = {
-            pname = "ggelo";
+            pname = "startrnr";
             version = "0.1.0";
             src = craneLib.path ./.;
             buildInputs = [ pkgs.openssl pkgs.sqlite ];
@@ -45,14 +45,14 @@
             inherit cargoArtifacts;
           });
 
-          ggelo = craneLib.buildPackage (commonArgs // {
+          startrnr = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts;
           });
       in {
-        packages.ggelo = ggelo;
-        packages.default = ggelo;
+        packages.startrnr = startrnr;
+        packages.default = startrnr;
 
-        checks.build = ggelo;
+        checks.build = startrnr;
         checks.runClippy = runClippy;
 
         devShells.default = pkgs.mkShell {

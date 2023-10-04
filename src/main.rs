@@ -25,10 +25,10 @@ pub fn issue(msg: &str, code: i32) -> ! {
 /// ## CLI Structs
 
 #[derive(Parser)]
-#[command(name = "StartGGElo")]
+#[command(name = "StartRNR")]
 #[command(author = "Kiana Sheibani <kiana.a.sheibani@gmail.com>")]
 #[command(version = "0.1.0")]
-#[command(about = "StartGGElo - Elo rating calculator for start.gg tournaments", long_about = None)]
+#[command(about = "StartRNR - Elo rating calculator for start.gg tournaments", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     subcommand: Subcommands,

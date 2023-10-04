@@ -28,7 +28,7 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
         Err(VarError::NotUnicode(_)) => error("Invalid authorization key", 2),
         Err(VarError::NotPresent) => {
             let mut auth_file = config_dir.to_owned();
-            auth_file.push("ggelo");
+            auth_file.push("startrnr");
             auth_file.push("auth.txt");
             read_to_string(auth_file).ok().and_then(|s| {
                 let trimmed = s.trim();
