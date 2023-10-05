@@ -125,7 +125,13 @@ pub fn new_dataset(
         CREATE INDEX "{0}_network_A"
         ON "{0}_network" (player_A);
         CREATE INDEX "{0}_network_B"
-        ON "{0}_network" (player_B);"#,
+        ON "{0}_network" (player_B);
+
+        CREATE VIEW "{0}_view"
+        (player_A_id, player_B_id, player_A_name, player_B_name, advantage, sets_A, sets_B, games_A, games_B) AS
+        SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage, sets_A, sets_B, games_A, games_B FROM "{0}_network"
+        INNER JOIN "{0}_players" players_A ON player_A = players_A.id
+        INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
         dataset
     );
 
