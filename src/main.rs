@@ -227,8 +227,8 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     #[allow(unused_must_use)]
     let datasets = if all {
         all_datasets
-    } else if datasets.len() == 0 {
-        if all_datasets.len() == 0 {
+    } else if datasets.is_empty() {
+        if all_datasets.is_empty() {
             print!("No datasets exist; create one? (y/n) ");
             if let Some('y') = read_string().chars().next() {
                 dataset_new(Some(String::from("default")), Some(auth.clone()));
@@ -250,10 +250,8 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(&connection, &dataset, dataset_config, &auth).unwrap_or_else(|_| {
-            connection.execute("ROLLBACK;").unwrap();
-            error("Error communicating with SQLite", 2)
-        });
+        sync_dataset(&connection, &dataset, dataset_config, &auth)
+            .unwrap_or_else(|_| error("Error communicating with SQLite", 2));
 
         update_last_sync(&connection, &dataset).expect("Error communicating with SQLite");
     }

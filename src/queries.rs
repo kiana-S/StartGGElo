@@ -48,7 +48,7 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
 // cynic always assumes that IDs are strings. To get around that, we define new
 // scalar types that deserialize to u64.
 
-#[derive(cynic::Scalar, Debug, Copy, Clone)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cynic(graphql_type = "ID")]
 pub struct VideogameId(pub u64);
 

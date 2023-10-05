@@ -71,14 +71,14 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     }
 }
 
-fn get_tournament_events(dataset_config: &DatasetMetadata, auth: &str) -> Option<Vec<EventId>> {
+fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<EventId>> {
     println!("Accessing tournaments...");
 
     let tour_response = run_query::<TournamentEvents, _>(
         TournamentEventsVars {
-            last_sync: dataset_config.last_sync,
-            game_id: dataset_config.game_id,
-            state: dataset_config.state.as_deref(),
+            last_sync: metadata.last_sync,
+            game_id: metadata.game_id,
+            state: metadata.state.as_deref(),
             page: 1,
         },
         auth,
@@ -109,9 +109,9 @@ fn get_tournament_events(dataset_config: &DatasetMetadata, auth: &str) -> Option
 
             let next_response = run_query::<TournamentEvents, _>(
                 TournamentEventsVars {
-                    last_sync: dataset_config.last_sync,
-                    game_id: dataset_config.game_id,
-                    state: dataset_config.state.as_deref(),
+                    last_sync: metadata.last_sync,
+                    game_id: metadata.game_id,
+                    state: metadata.state.as_deref(),
                     page,
                 },
                 auth,
@@ -144,9 +144,12 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
     let player1 = it.next().unwrap()[0].id;
     let player2 = it.next().unwrap()[0].id;
 
-    let advantage = get_advantage(connection, dataset, player1, player2)
-        .or_else(|_| hypothetical_advantage(connection, dataset, player1, player2))?;
-    let adjust = 40.0 * (1.0 - 1.0 / (1.0 + 10_f64.powf(advantage / 400.0)));
+    let advantage = match get_advantage(connection, dataset, player1, player2) {
+        Err(e) => Err(e)?,
+        Ok(None) => initialize_edge(connection, dataset, player1, player2)?,
+        Ok(Some(adv)) => adv,
+    };
+    let adjust = 30.0 * (1.0 - 1.0 / (1.0 + 10_f64.powf(advantage / 400.0)));
 
     if results.winner == 0 {
         adjust_advantages(connection, dataset, player1, 0.5 * adjust)?;
@@ -175,10 +178,10 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
 pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
-    dataset_config: DatasetMetadata,
+    metadata: DatasetMetadata,
     auth: &str,
 ) -> sqlite::Result<()> {
-    let events = get_tournament_events(&dataset_config, auth)
+    let events = get_tournament_events(&metadata, auth)
         .unwrap_or_else(|| error("Could not access start.gg", 1));
 
     connection.execute("BEGIN;")?;
@@ -190,10 +193,8 @@ pub fn sync_dataset(
             event.0, i, num_events
         );
 
-        let sets = get_event_sets(event, auth).unwrap_or_else(|| {
-            connection.execute("ROLLBACK;").unwrap();
-            error("Could not access start.gg", 1)
-        });
+        let sets =
+            get_event_sets(event, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
 
         println!("  Updating ratings from event...");
 

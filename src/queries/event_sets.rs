@@ -79,6 +79,7 @@ pub struct EventSetsResponse {
     pub sets: Vec<SetData>,
 }
 
+#[derive(Debug)]
 pub struct SetData {
     pub teams: Teams<PlayerData>,
     pub winner: usize,

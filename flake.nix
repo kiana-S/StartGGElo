@@ -32,6 +32,7 @@
             src = craneLib.path ./.;
             buildInputs = [ pkgs.openssl pkgs.sqlite ];
             nativeBuildInputs = [ pkgs.pkg-config ];
+            doCheck = false;
           };
 
           # Cargo build dependencies/artifacts only
@@ -52,7 +53,10 @@
         packages.startrnr = startrnr;
         packages.default = startrnr;
 
-        checks.build = startrnr;
+        checks.build = startrnr.overrideAttrs {
+          doCheck = true;
+          cargoArtifacts = cargoArtifacts.overrideAttrs { doCheck = true; };
+        };
         checks.runClippy = runClippy;
 
         devShells.default = pkgs.mkShell {
