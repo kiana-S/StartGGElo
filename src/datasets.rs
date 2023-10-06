@@ -86,7 +86,8 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
     let query = format!(
         r#"DELETE FROM datasets WHERE name = '{0}';
         DROP TABLE "{0}_players";
-        DROP TABLE "{0}_network";"#,
+        DROP TABLE "{0}_network";
+        DROP VIEW "{0}_view";"#,
         dataset
     );
 
@@ -100,38 +101,40 @@ pub fn new_dataset(
 ) -> sqlite::Result<()> {
     let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?)"#;
     let query2 = format!(
-        r#"
-        CREATE TABLE "{0}_players" (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            prefix TEXT
-        );
-        CREATE TABLE "{0}_network" (
-            player_A INTEGER NOT NULL,
-            player_B INTEGER NOT NULL,
-            advantage REAL NOT NULL,
-            sets_A INTEGER NOT NULL DEFAULT 0,
-            sets_B INTEGER NOT NULL DEFAULT 0,
-            games_A INTEGER NOT NULL DEFAULT 0,
-            games_B INTEGER NOT NULL DEFAULT 0,
+        r#"CREATE TABLE "{0}_players" (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    prefix TEXT
+);
 
-            UNIQUE (player_A, player_B),
-            CHECK (player_A < player_B),
-            FOREIGN KEY(player_A) REFERENCES "{0}_players"
-                ON DELETE CASCADE,
-            FOREIGN KEY(player_B) REFERENCES "{0}_players"
-                ON DELETE CASCADE
-        ) STRICT;
-        CREATE INDEX "{0}_network_A"
-        ON "{0}_network" (player_A);
-        CREATE INDEX "{0}_network_B"
-        ON "{0}_network" (player_B);
+CREATE TABLE "{0}_network" (
+    player_A INTEGER NOT NULL,
+    player_B INTEGER NOT NULL,
+    advantage REAL NOT NULL,
+    sets_A INTEGER NOT NULL DEFAULT 0,
+    sets_B INTEGER NOT NULL DEFAULT 0,
+    games_A INTEGER NOT NULL DEFAULT 0,
+    games_B INTEGER NOT NULL DEFAULT 0,
 
-        CREATE VIEW "{0}_view"
-        (player_A_id, player_B_id, player_A_name, player_B_name, advantage, sets_A, sets_B, games_A, games_B) AS
-        SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage, sets_A, sets_B, games_A, games_B FROM "{0}_network"
-        INNER JOIN "{0}_players" players_A ON player_A = players_A.id
-        INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
+    UNIQUE (player_A, player_B),
+    CHECK (player_A < player_B),
+    FOREIGN KEY(player_A) REFERENCES "{0}_players"
+        ON DELETE CASCADE,
+    FOREIGN KEY(player_B) REFERENCES "{0}_players"
+        ON DELETE CASCADE
+) STRICT;
+CREATE INDEX "{0}_network_A"
+    ON "{0}_network" (player_A);
+CREATE INDEX "{0}_network_B"
+    ON "{0}_network" (player_B);
+
+CREATE VIEW "{0}_view"
+    (player_A_id, player_B_id, player_A_name, player_B_name, advantage,
+        sets_A, sets_B, sets, games_A, games_B, games) AS
+    SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage,
+        sets_A, sets_B, sets_A + sets_B, games_A, games_B, games_A + games_B FROM "{0}_network"
+    INNER JOIN "{0}_players" players_A ON player_A = players_A.id
+    INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
         dataset
     );
 
