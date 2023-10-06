@@ -361,9 +361,9 @@ pub fn hypothetical_advantage(
     let mut paths: Vec<(Vec<PlayerId>, f64)> = vec![(vec![player1], 0.0)];
     let mut visited: HashSet<PlayerId> = HashSet::new();
 
-    let mut final_adv: Option<f64> = None;
+    let mut final_path: Option<(f64, usize)> = None;
 
-    while final_adv.is_none() {
+    while final_path.is_none() {
         if paths.is_empty() {
             return Ok(0.0);
         }
@@ -377,12 +377,12 @@ pub fn hypothetical_advantage(
                         if visited.contains(&id) {
                             None
                         } else {
+                            if id == player2 {
+                                final_path = Some((old_adv + adv, path.len() - 1));
+                            }
                             visited.insert(id);
                             let mut path_ = path.clone();
                             path_.extend_one(id);
-                            if id == player2 {
-                                final_adv = Some(old_adv + adv);
-                            }
                             Some((path_, old_adv + adv))
                         }
                     })
@@ -394,7 +394,8 @@ pub fn hypothetical_advantage(
             })?;
     }
 
-    Ok(final_adv.unwrap())
+    let (final_adv, len) = final_path.unwrap();
+    Ok(final_adv * 0.5_f64.powi(len as i32))
 }
 
 pub fn initialize_edge(
@@ -432,7 +433,7 @@ mod tests {
         Ok(connection)
     }
 
-    // Functions to generate test data
+    // Functions to generate placeholder data
 
     fn metadata() -> DatasetMetadata {
         DatasetMetadata {
