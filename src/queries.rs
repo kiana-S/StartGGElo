@@ -48,23 +48,23 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
 // cynic always assumes that IDs are strings. To get around that, we define new
 // scalar types that deserialize to u64.
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
 pub struct VideogameId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
 pub struct EventId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
 pub struct EntrantId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
 pub struct PlayerId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(pub u64);
 
 // Query machinery
