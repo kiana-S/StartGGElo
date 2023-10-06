@@ -338,8 +338,8 @@ pub fn is_isolated(
         .bind((":pl", player.0 as i64))?
         .next()
     {
-        None => Ok(false),
-        Some(r) => r.map(|_| true),
+        None => Ok(true),
+        Some(r) => r.map(|_| false),
     }
 }
 
