@@ -104,7 +104,10 @@ pub fn new_dataset(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY,
     name TEXT,
-    prefix TEXT
+    prefix TEXT,
+    deviation REAL NOT NULL,
+    volatility REAL NOT NULL,
+    last_played INTEGER NOT NULL
 );
 
 CREATE TABLE "{0}_network" (
@@ -196,9 +199,10 @@ pub fn add_players(
     connection: &Connection,
     dataset: &str,
     teams: &Teams<PlayerData>,
+    time: Timestamp,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"INSERT OR IGNORE INTO "{}_players" VALUES (?, ?, ?)"#,
+        r#"INSERT OR IGNORE INTO "{}_players" VALUES (?, ?, ?, ?, ?, ?)"#,
         dataset
     );
 
@@ -208,9 +212,54 @@ pub fn add_players(
             statement.bind((1, id.0 as i64))?;
             statement.bind((2, name.as_ref().map(|x| &x[..])))?;
             statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
+            statement.bind((4, 2.01))?;
+            statement.bind((5, 0.06))?;
+            statement.bind((6, time.0 as i64))?;
             statement.into_iter().try_for_each(|x| x.map(|_| ()))
         })
     })
+}
+
+pub fn get_player_data(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+) -> sqlite::Result<(f64, f64, Timestamp)> {
+    let query = format!(
+        r#"SELECT deviation, volatility, last_played FROM "{}_players" WHERE id = ?"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, player.0 as i64))?;
+    statement.next()?;
+    Ok((
+        statement.read::<f64, _>("deviation")?,
+        statement.read::<f64, _>("volatility")?,
+        Timestamp(statement.read::<i64, _>("last_played")? as u64),
+    ))
+}
+
+pub fn set_player_data(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+    last_played: Timestamp,
+    deviation: f64,
+    volatility: f64,
+) -> sqlite::Result<()> {
+    let query = format!(
+        r#"UPDATE "{}_players" SET deviation = ?, volatility = ?, last_played = ? WHERE id = ?"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, deviation))?;
+    statement.bind((2, volatility))?;
+    statement.bind((3, last_played.0 as i64))?;
+    statement.bind((4, player.0 as i64))?;
+    statement.next()?;
+    Ok(())
 }
 
 pub fn get_advantage(
@@ -412,11 +461,11 @@ pub fn initialize_edge(
 // Tests
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
     // Mock a database file in transient memory
-    fn mock_datasets() -> sqlite::Result<Connection> {
+    pub fn mock_datasets() -> sqlite::Result<Connection> {
         let query = "
             PRAGMA foreign_keys = ON;
 
@@ -435,7 +484,7 @@ mod tests {
 
     // Functions to generate placeholder data
 
-    fn metadata() -> DatasetMetadata {
+    pub fn metadata() -> DatasetMetadata {
         DatasetMetadata {
             last_sync: Timestamp(1),
             game_id: VideogameId(0),
@@ -444,7 +493,7 @@ mod tests {
         }
     }
 
-    fn players(num: u64) -> Vec<PlayerData> {
+    pub fn players(num: u64) -> Vec<PlayerData> {
         (1..=num)
             .map(|i| PlayerData {
                 id: PlayerId(i),
@@ -477,7 +526,7 @@ mod tests {
         let connection = mock_datasets()?;
         new_dataset(&connection, "test", metadata())?;
 
-        add_players(&connection, "test", &vec![players(2)])?;
+        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
 
         let mut statement =
             connection.prepare("SELECT * FROM dataset_test_players WHERE id = 1")?;
@@ -493,7 +542,7 @@ mod tests {
     fn edge_insert_get() -> sqlite::Result<()> {
         let connection = mock_datasets()?;
         new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(2)])?;
+        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
 
         insert_advantage(&connection, "test", PlayerId(2), PlayerId(1), 1.0)?;
 
@@ -513,7 +562,7 @@ mod tests {
     fn player_all_edges() -> sqlite::Result<()> {
         let connection = mock_datasets()?;
         new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(3)])?;
+        add_players(&connection, "test", &vec![players(3)], Timestamp(0))?;
 
         insert_advantage(&connection, "test", PlayerId(2), PlayerId(1), 1.0)?;
         insert_advantage(&connection, "test", PlayerId(1), PlayerId(3), 5.0)?;
@@ -539,7 +588,12 @@ mod tests {
 
         let connection = mock_datasets()?;
         new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(num_players)])?;
+        add_players(
+            &connection,
+            "test",
+            &vec![players(num_players)],
+            Timestamp(0),
+        )?;
 
         for i in 1..=num_players {
             for j in 1..=num_players {
@@ -557,7 +611,7 @@ mod tests {
     fn hypoth_adv1() -> sqlite::Result<()> {
         let connection = mock_datasets()?;
         new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(2)])?;
+        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
 
         insert_advantage(&connection, "test", PlayerId(1), PlayerId(2), 1.0)?;
 

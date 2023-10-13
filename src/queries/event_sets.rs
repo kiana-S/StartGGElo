@@ -1,4 +1,4 @@
-use super::{EntrantId, EventId, PlayerData, PlayerId, QueryUnwrap};
+use super::{EntrantId, EventId, PlayerData, PlayerId, QueryUnwrap, Timestamp};
 use cynic::GraphQlResponse;
 use schema::schema;
 
@@ -42,6 +42,7 @@ struct PageInfo {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Set {
+    start_at: Option<Timestamp>,
     #[arguments(includeByes: true)]
     #[cynic(flatten)]
     slots: Vec<SetSlot>,
@@ -81,6 +82,7 @@ pub struct EventSetsResponse {
 
 #[derive(Debug)]
 pub struct SetData {
+    pub time: Timestamp,
     pub teams: Teams<PlayerData>,
     pub winner: usize,
 }
@@ -122,7 +124,11 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                             .try_collect()
                     })
                     .try_collect()?;
-                Some(SetData { teams, winner })
+                Some(SetData {
+                    time: set.start_at?,
+                    teams,
+                    winner,
+                })
             })
             .collect::<Vec<_>>();
 
