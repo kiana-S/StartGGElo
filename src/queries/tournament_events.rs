@@ -13,6 +13,7 @@ pub struct TournamentEventsVars<'a> {
     pub last_sync: Timestamp,
 
     pub game_id: VideogameId,
+    pub country: Option<&'a str>,
     pub state: Option<&'a str>,
     pub page: i32,
 }
@@ -30,6 +31,7 @@ pub struct TournamentEvents {
             past: true,
             afterDate: $last_sync,
             videogameIds: [$game_id],
+            countryCode: $country,
             addrState: $state
         }})]
     tournaments: Option<TournamentConnection>,

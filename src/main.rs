@@ -193,7 +193,11 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
             last_sync: Timestamp(1),
             game_id,
             game_name,
+            country: None,
             state: None,
+            decay_rate: 0.5,
+            period: (3600 * 24 * 30) as f64,
+            tau: 0.2,
         },
     )
     .expect("Error communicating with SQLite");

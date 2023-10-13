@@ -39,10 +39,11 @@ fn glicko_adjust(
     other_deviation: f64,
     won: bool,
     time: u64,
+    metadata: &DatasetMetadata,
 ) -> (f64, f64, f64) {
     // TODO: Turn this into dataset metadata
-    let tau = 0.2;
-    let period = (3600 * 24 * 30) as f64;
+    let period = metadata.period;
+    let tau = metadata.tau;
 
     let g_val = 1.0 / (1.0 + 3.0 * other_deviation * other_deviation / PI / PI).sqrt();
     let exp_val = 1.0 / (1.0 + f64::exp(-g_val * advantage));
@@ -122,6 +123,7 @@ fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<E
         TournamentEventsVars {
             last_sync: metadata.last_sync,
             game_id: metadata.game_id,
+            country: metadata.country.as_deref(),
             state: metadata.state.as_deref(),
             page: 1,
         },
@@ -155,6 +157,7 @@ fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<E
                 TournamentEventsVars {
                     last_sync: metadata.last_sync,
                     game_id: metadata.game_id,
+                    country: metadata.country.as_deref(),
                     state: metadata.state.as_deref(),
                     page,
                 },
@@ -175,7 +178,12 @@ fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<E
 
 // Dataset syncing
 
-fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> sqlite::Result<()> {
+fn update_from_set(
+    connection: &Connection,
+    dataset: &str,
+    metadata: &DatasetMetadata,
+    results: SetData,
+) -> sqlite::Result<()> {
     let players_data = results.teams;
     add_players(connection, dataset, &players_data, results.time)?;
 
@@ -193,7 +201,7 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
     let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
     let advantage = match get_advantage(connection, dataset, player1, player2) {
         Err(e) => Err(e)?,
-        Ok(None) => initialize_edge(connection, dataset, player1, player2)?,
+        Ok(None) => initialize_edge(connection, dataset, metadata.decay_rate, player1, player2)?,
         Ok(Some(adv)) => adv,
     };
     let (adjust1, dev_new1, vol_new1) = glicko_adjust(
@@ -203,6 +211,7 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
         deviation2,
         results.winner == 0,
         results.time.0 - last_played1.0,
+        metadata,
     );
     let (adjust2, dev_new2, vol_new2) = glicko_adjust(
         advantage,
@@ -211,6 +220,7 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
         deviation1,
         results.winner == 1,
         results.time.0 - last_played2.0,
+        metadata,
     );
 
     set_player_data(
@@ -230,14 +240,15 @@ fn update_from_set(connection: &Connection, dataset: &str, results: SetData) -> 
         vol_new2,
     )?;
 
-    adjust_advantages(connection, dataset, player1, 0.5 * adjust1)?;
-    adjust_advantages(connection, dataset, player2, 0.5 * adjust2)?;
+    let decay_rate = metadata.decay_rate;
+    adjust_advantages(connection, dataset, player1, decay_rate * adjust1)?;
+    adjust_advantages(connection, dataset, player2, decay_rate * adjust2)?;
     adjust_advantage(
         connection,
         dataset,
         player1,
         player2,
-        (1.0 - 0.5) * (adjust2 - adjust1),
+        (1.0 - decay_rate) * (adjust2 - adjust1),
     )
 }
 
@@ -265,7 +276,7 @@ pub fn sync_dataset(
         println!("  Updating ratings from event...");
 
         sets.into_iter()
-            .try_for_each(|set| update_from_set(connection, dataset, set))?;
+            .try_for_each(|set| update_from_set(connection, dataset, &metadata, set))?;
     }
     connection.execute("COMMIT;")
 }
@@ -285,6 +296,7 @@ mod tests {
         update_from_set(
             &connection,
             "test",
+            &metadata(),
             SetData {
                 time: Timestamp(0),
                 teams: players,

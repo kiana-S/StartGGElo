@@ -11,7 +11,12 @@ pub struct DatasetMetadata {
 
     pub game_id: VideogameId,
     pub game_name: String,
+    pub country: Option<String>,
     pub state: Option<String>,
+
+    pub decay_rate: f64,
+    pub period: f64,
+    pub tau: f64,
 }
 
 /// Return the path to the datasets file.
@@ -33,16 +38,19 @@ fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
 pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let path = datasets_path(config_dir).unwrap();
 
-    let query = "
-        PRAGMA foreign_keys = ON;
+    let query = "PRAGMA foreign_keys = ON;
 
-        CREATE TABLE IF NOT EXISTS datasets (
-            name TEXT UNIQUE NOT NULL,
-            last_sync INTEGER NOT NULL,
-            game_id INTEGER NOT NULL,
-            game_name TEXT NOT NULL,
-            state TEXT
-        ) STRICT;";
+CREATE TABLE IF NOT EXISTS datasets (
+    name TEXT UNIQUE NOT NULL,
+    last_sync INTEGER NOT NULL,
+    game_id INTEGER NOT NULL,
+    game_name TEXT NOT NULL,
+    country TEXT,
+    state TEXT,
+    decay_rate REAL NOT NULL,
+    period REAL NOT NULL,
+    tau REAL NOT NULL
+) STRICT;";
 
     let connection = sqlite::open(path)?;
     connection.execute(query)?;
@@ -75,7 +83,11 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, Dat
                     last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                     game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
                     game_name: r_.read::<&str, _>("game_name").to_owned(),
+                    country: r_.read::<Option<&str>, _>("country").map(String::from),
                     state: r_.read::<Option<&str>, _>("state").map(String::from),
+                    decay_rate: r_.read::<f64, _>("decay_rate"),
+                    period: r_.read::<f64, _>("period"),
+                    tau: r_.read::<f64, _>("tau"),
                 },
             ))
         })
@@ -99,7 +111,7 @@ pub fn new_dataset(
     dataset: &str,
     metadata: DatasetMetadata,
 ) -> sqlite::Result<()> {
-    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?)"#;
+    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY,
@@ -148,7 +160,11 @@ CREATE VIEW "{0}_view"
         .bind((2, metadata.last_sync.0 as i64))?
         .bind((3, metadata.game_id.0 as i64))?
         .bind((4, &metadata.game_name[..]))?
-        .bind((5, metadata.state.as_deref()))?
+        .bind((5, metadata.country.as_deref()))?
+        .bind((6, metadata.state.as_deref()))?
+        .bind((7, metadata.decay_rate))?
+        .bind((8, metadata.period))?
+        .bind((9, metadata.tau))?
         .try_for_each(|x| x.map(|_| ()))?;
 
     connection.execute(query2)
@@ -158,7 +174,7 @@ pub fn get_metadata(
     connection: &Connection,
     dataset: &str,
 ) -> sqlite::Result<Option<DatasetMetadata>> {
-    let query = "SELECT last_sync, game_id, game_name, state FROM datasets WHERE name = ?";
+    let query = "SELECT * FROM datasets WHERE name = ?";
 
     Ok(connection
         .prepare(query)?
@@ -171,7 +187,11 @@ pub fn get_metadata(
                 last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                 game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
                 game_name: r_.read::<&str, _>("game_name").to_owned(),
+                country: r_.read::<Option<&str>, _>("country").map(String::from),
                 state: r_.read::<Option<&str>, _>("state").map(String::from),
+                decay_rate: r_.read::<f64, _>("decay_rate"),
+                period: r_.read::<f64, _>("period"),
+                tau: r_.read::<f64, _>("tau"),
             })
         })
         .and_then(Result::ok))
@@ -395,6 +415,7 @@ pub fn is_isolated(
 pub fn hypothetical_advantage(
     connection: &Connection,
     dataset: &str,
+    decay_rate: f64,
     player1: PlayerId,
     player2: PlayerId,
 ) -> sqlite::Result<f64> {
@@ -444,16 +465,17 @@ pub fn hypothetical_advantage(
     }
 
     let (final_adv, len) = final_path.unwrap();
-    Ok(final_adv * 0.5_f64.powi(len as i32))
+    Ok(final_adv * decay_rate.powi(len as i32))
 }
 
 pub fn initialize_edge(
     connection: &Connection,
     dataset: &str,
+    decay_rate: f64,
     player1: PlayerId,
     player2: PlayerId,
 ) -> sqlite::Result<f64> {
-    let adv = hypothetical_advantage(connection, dataset, player1, player2)?;
+    let adv = hypothetical_advantage(connection, dataset, decay_rate, player1, player2)?;
     insert_advantage(connection, dataset, player1, player2, adv)?;
     Ok(adv)
 }
@@ -489,7 +511,11 @@ pub mod tests {
             last_sync: Timestamp(1),
             game_id: VideogameId(0),
             game_name: String::from("Test Game"),
+            country: None,
             state: None,
+            decay_rate: 0.5,
+            period: (3600 * 24 * 30) as f64,
+            tau: 0.2,
         }
     }
 
@@ -598,7 +624,7 @@ pub mod tests {
         for i in 1..=num_players {
             for j in 1..=num_players {
                 assert_eq!(
-                    hypothetical_advantage(&connection, "test", PlayerId(i), PlayerId(j))?,
+                    hypothetical_advantage(&connection, "test", 0.5, PlayerId(i), PlayerId(j))?,
                     0.0
                 );
             }
@@ -616,7 +642,7 @@ pub mod tests {
         insert_advantage(&connection, "test", PlayerId(1), PlayerId(2), 1.0)?;
 
         assert_eq!(
-            hypothetical_advantage(&connection, "test", PlayerId(1), PlayerId(2))?,
+            hypothetical_advantage(&connection, "test", 0.5, PlayerId(1), PlayerId(2))?,
             1.0
         );
 
