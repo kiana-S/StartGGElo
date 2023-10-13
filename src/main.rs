@@ -148,10 +148,14 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
         .or_else(|| get_auth_token(&config_dir))
         .unwrap_or_else(|| error("Access token not provided", 1));
 
+    // Name
+
     let name = name.unwrap_or_else(|| {
         print!("Name of new dataset: ");
         read_string()
     });
+
+    // Game
 
     print!("Search games: ");
     let games = run_query::<VideogameSearch, _>(
@@ -184,6 +188,32 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
         name: game_name,
     } = games[index].clone();
 
+    // Location
+
+    print!("\nCountry to track ratings for (two-letter code, leave empty for none): ");
+    let country = {
+        let string = read_string();
+        if string.is_empty() {
+            None
+        } else {
+            Some(string)
+        }
+    };
+
+    let state = if country.as_ref().is_some_and(|s| s == "US" || s == "CA") {
+        print!("\nState/province to track ratings for (two-letter code, leave empty for none): ");
+        let string = read_string();
+        if string.is_empty() {
+            None
+        } else {
+            Some(string)
+        }
+    } else {
+        None
+    };
+
+    // Done configuring
+
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
     new_dataset(
@@ -193,8 +223,8 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
             last_sync: Timestamp(1),
             game_id,
             game_name,
-            country: None,
-            state: None,
+            country,
+            state,
             decay_rate: 0.5,
             period: (3600 * 24 * 30) as f64,
             tau: 0.2,
