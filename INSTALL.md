@@ -11,8 +11,8 @@ program checks for a token in:
 
 - A command-line flag `--auth`.
 - An environment variable `AUTH_TOKEN`,
-- A file `auth.txt` within the config directory (see the [[README]] for a list
-  of directories in each OS).
+- A file `auth.txt` within the config directory (see the [README](README.md) for
+  a list of directories in each OS).
 
 The last method is recommended, as StartRNR can simply read from that file
 whenever it needs to.
@@ -20,7 +20,7 @@ whenever it needs to.
 ## Step 2: Dependencies
 
 StartRNR is written in Rust, so install the [Rust
-compiler](https://www.rust-lang.org/tools/install).
+toolchain](https://www.rust-lang.org/tools/install).
 
 In addition, StartRNR needs these run-time dependencies:
 

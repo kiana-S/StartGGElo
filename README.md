@@ -13,7 +13,10 @@ rankings automatically.
 **All of these features work for any game, in any region, without restriction.**
 
 > **Warning**<br>
-> StartRNR is still under development; currently, it only supports generating the network.
+> StartRNR is unstable and under active development. The design and user
+> interface of this program is experimental and may be subject to change.
+> 
+> Currently, only generating datasets has been implemented.
 
 ## Installation
 
@@ -39,9 +42,9 @@ StartRNR stores its rating databases in its config directory, which is located a
 - MacOS: `~/Library/Application Support/startrnr`
 - Linux: `~/.config/startrnr`
 
-There are few reasons to access this directory directly, but you can if you want to transfer your
-datasets between computers.
+This directory can be used to store the authentication token, which is required
+for using StartRNR.
 
-## RNR system basics
+## Details - The RNR System
 
-*For more information on StartRNR's rating system, see the [details page](DETAILS.md).*
+*For more information on RNR, see the [details page](DETAILS.md).*
