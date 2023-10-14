@@ -117,13 +117,20 @@ fn dataset_list() {
     let config_dir = dirs::config_dir().expect("Could not determine config directory");
 
     let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
     println!();
     for (name, metadata) in datasets {
-        if let Some(state) = metadata.state {
-            println!("{} - {}, {}", name, metadata.game_name, state);
+        if let Some(country) = metadata.country {
+            if let Some(state) = metadata.state {
+                println!(
+                    "{} - {} (in {}, {})",
+                    name, metadata.game_name, country, state
+                );
+            } else {
+                println!("{} - {} (in {})", name, metadata.game_name, country);
+            }
         } else {
             println!("{} - {}", name, metadata.game_name);
         }
@@ -190,32 +197,136 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
 
     // Location
 
-    print!("\nCountry to track ratings for (two-letter code, leave empty for none): ");
+    print!(
+        "
+\x1b[4mCountry\x1b[0m
+
+Enter the two-letter code for the country you want to track ratings in, e.g.
+\"US\" for the United States. See \x1b[1m\x1b]8;;https://www.ups.com/worldshiphelp/\
+WSA/ENU/AppHelp/mergedProjects/CORE/Codes/Country_Territory_and_Currency_Codes.htm\
+\x1b\\this site\x1b]8;;\x1b\\\x1b[0m for a list of these codes.
+If no code is entered, then the dataset will track all players globally.
+
+Country to track ratings for (leave empty for none): "
+    );
     let country = {
-        let string = read_string();
+        let mut string = read_string();
         if string.is_empty() {
             None
-        } else {
+        } else if string.len() == 2 && string.chars().all(|c| c.is_ascii_alphabetic()) {
+            string.make_ascii_uppercase();
             Some(string)
+        } else {
+            error("Input is not a two-letter code", 1);
         }
     };
 
     let state = if country.as_ref().is_some_and(|s| s == "US" || s == "CA") {
-        print!("\nState/province to track ratings for (two-letter code, leave empty for none): ");
-        let string = read_string();
+        print!(
+            "
+\x1b[4mState/Province\x1b[0m
+
+Enter the two-letter code for the US state or Canadian province you want to track
+ratings in, e.g. \"CA\" for California. See \x1b[1m\x1b]8;;https://www.ups.com/worldshiphelp/\
+WSA/ENU/AppHelp/mergedProjects/CORE/Codes/State_Province_Codes.htm\x1b\\this site\
+\x1b]8;;\x1b\\\x1b[0m for a list of these codes.
+If no code is entered, then the dataset will track all players within the country.
+
+State/province to track ratings for (leave empty for none): "
+        );
+        let mut string = read_string();
         if string.is_empty() {
             None
-        } else {
+        } else if string.len() == 2 && string.chars().all(|c| c.is_ascii_alphabetic()) {
+            string.make_ascii_uppercase();
             Some(string)
+        } else {
+            error("Input is not a two-letter code", 1);
         }
     } else {
         None
     };
 
+    // Advanced Options
+
+    // Defaults
+    let mut decay_rate = 0.5;
+    let mut period_days = 30.0;
+    let mut tau = 0.2;
+
+    print!("\nConfigure advanced options? (y/n) ");
+    if let Some('y') = read_string().chars().next() {
+        // Decay Rate
+
+        print!(
+            "
+\x1b[4mNetwork Decay Rate\x1b[0m
+
+The network decay rate is a number between 0 and 1 that controls how the
+advantage network reacts to player wins and losses. If the decay rate is 1,
+then it is assumed that a player's skill against one opponent always carries
+over to all other opponents. If the decay rate is 0, then all player match-ups
+are assumed to be independent of each other.
+
+Network decay rate (default 0.5): "
+        );
+        let decay_rate_input = read_string();
+        if !decay_rate_input.is_empty() {
+            decay_rate = decay_rate_input
+                .parse::<f64>()
+                .unwrap_or_else(|_| error("Not a number", 1));
+        }
+
+        // Rating Period
+
+        print!(
+            "
+\x1b[4mRating Period\x1b[0m
+
+The rating period is an interval of time that dictates how player ratings change
+during inactivity. Ideally the rating period should be somewhat long, long
+enough to expect almost every player in the dataset to have played at least a
+few sets.
+
+Rating period (in days, default 30): "
+        );
+        let period_input = read_string();
+        if !period_input.is_empty() {
+            period_days = period_input
+                .parse::<f64>()
+                .unwrap_or_else(|_| error("Not a number", 1));
+        }
+
+        // Tau coefficient
+
+        print!(
+            "
+\x1b[4mTau Constant\x1b[0m
+
+The tau constant is an internal system constant that roughly represents how
+much random chance and luck play a role in game outcomes. In games where match
+results are highly predictable, and a player's skill is the sole factor for
+whether they will win, the tau constant should be high (0.9 - 1.2). In games
+where luck matters, and more improbable victories can occur, the tau constant
+should be low (0.2 - 0.4).
+
+The tau constant is set low by default, since skill-based competitive video
+games tend to be on the more luck-heavy side.
+
+Tau constant (default 0.2): "
+        );
+        let tau_input = read_string();
+        if !tau_input.is_empty() {
+            tau = tau_input
+                .parse::<f64>()
+                .unwrap_or_else(|_| error("Not a number", 1));
+        }
+    }
+
     // Done configuring
 
     let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     new_dataset(
         &connection,
         &name,
@@ -225,12 +336,14 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
             game_name,
             country,
             state,
-            decay_rate: 0.5,
-            period: (3600 * 24 * 30) as f64,
-            tau: 0.2,
+            decay_rate,
+            period: (3600 * 24) as f64 * period_days,
+            tau,
         },
     )
     .expect("Error communicating with SQLite");
+
+    println!("\nCreated dataset {}", name);
 }
 
 fn dataset_delete(name: Option<String>) {
@@ -242,8 +355,8 @@ fn dataset_delete(name: Option<String>) {
     });
 
     let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
-    delete_dataset(&connection, &name).expect("Error communicating with SQLite");
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+    delete_dataset(&connection, &name).unwrap_or_else(|_| error("That dataset does not exist!", 1));
 }
 
 fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
@@ -254,7 +367,7 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
         .unwrap_or_else(|| error("Access token not provided", 1));
 
     let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 1));
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
     let all_datasets = list_dataset_names(&connection).unwrap();
 
