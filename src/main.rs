@@ -28,7 +28,7 @@ pub fn issue(msg: &str, code: i32) -> ! {
 #[derive(Parser)]
 #[command(name = "StartRNR")]
 #[command(author = "Kiana Sheibani <kiana.a.sheibani@gmail.com>")]
-#[command(version = "0.1.0")]
+#[command(version = "0.2.0")]
 #[command(about = "StartRNR - Elo rating calculator for start.gg tournaments", long_about = None)]
 struct Cli {
     #[command(subcommand)]
