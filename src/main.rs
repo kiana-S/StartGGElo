@@ -251,8 +251,8 @@ State/province to track ratings for (leave empty for none): "
 
     // Defaults
     let mut decay_rate = 0.5;
-    let mut period_days = 30.0;
-    let mut tau = 0.2;
+    let mut period_days = 40.0;
+    let mut tau = 0.4;
 
     print!("\nConfigure advanced options? (y/n) ");
     if let Some('y') = read_string().chars().next() {
@@ -288,7 +288,7 @@ during inactivity. Ideally the rating period should be somewhat long, long
 enough to expect almost every player in the dataset to have played at least a
 few sets.
 
-Rating period (in days, default 30): "
+Rating period (in days, default 40): "
         );
         let period_input = read_string();
         if !period_input.is_empty() {
@@ -313,7 +313,7 @@ should be low (0.2 - 0.4).
 The tau constant is set low by default, since skill-based competitive video
 games tend to be on the more luck-heavy side.
 
-Tau constant (default 0.2): "
+Tau constant (default 0.4): "
         );
         let tau_input = read_string();
         if !tau_input.is_empty() {
