@@ -119,6 +119,8 @@ pub fn new_dataset(
     prefix TEXT,
     deviation REAL NOT NULL,
     volatility REAL NOT NULL,
+    sets_won INTEGER NOT NULL,
+    sets_lost INTEGER NOT NULL,
     last_played INTEGER NOT NULL
 );
 
@@ -128,8 +130,6 @@ CREATE TABLE "{0}_network" (
     advantage REAL NOT NULL,
     sets_A INTEGER NOT NULL DEFAULT 0,
     sets_B INTEGER NOT NULL DEFAULT 0,
-    games_A INTEGER NOT NULL DEFAULT 0,
-    games_B INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE (player_A, player_B),
     CHECK (player_A < player_B),
@@ -144,10 +144,9 @@ CREATE INDEX "{0}_network_B"
     ON "{0}_network" (player_B);
 
 CREATE VIEW "{0}_view"
-    (player_A_id, player_B_id, player_A_name, player_B_name, advantage,
-        sets_A, sets_B, sets, games_A, games_B, games) AS
+    (player_A_id, player_B_id, player_A_name, player_B_name, advantage, sets_A, sets_B, sets) AS
     SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage,
-        sets_A, sets_B, sets_A + sets_B, games_A, games_B, games_A + games_B FROM "{0}_network"
+        sets_A, sets_B, sets_A + sets_B FROM "{0}_network"
     INNER JOIN "{0}_players" players_A ON player_A = players_A.id
     INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
         dataset
@@ -222,7 +221,8 @@ pub fn add_players(
     time: Timestamp,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"INSERT OR IGNORE INTO "{}_players" VALUES (?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT OR IGNORE INTO "{}_players"
+            VALUES (?, ?, ?, 2.01, 0.06, 0, 0, ?)"#,
         dataset
     );
 
@@ -232,9 +232,7 @@ pub fn add_players(
             statement.bind((1, id.0 as i64))?;
             statement.bind((2, name.as_ref().map(|x| &x[..])))?;
             statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
-            statement.bind((4, 2.01))?;
-            statement.bind((5, 0.06))?;
-            statement.bind((6, time.0 as i64))?;
+            statement.bind((4, time.0 as i64))?;
             statement.into_iter().try_for_each(|x| x.map(|_| ()))
         })
     })
@@ -267,17 +265,20 @@ pub fn set_player_data(
     last_played: Timestamp,
     deviation: f64,
     volatility: f64,
+    won: bool,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"UPDATE "{}_players" SET deviation = ?, volatility = ?, last_played = ? WHERE id = ?"#,
+        r#"UPDATE "{}_players" SET deviation = :dev, volatility = :vol, last_played = :last,
+            sets_won = iif(:won, sets_won + 1, sets_won), sets_lost = iif(:won, sets_lost, sets_lost + 1) WHERE id = :id"#,
         dataset
     );
 
     let mut statement = connection.prepare(&query)?;
-    statement.bind((1, deviation))?;
-    statement.bind((2, volatility))?;
-    statement.bind((3, last_played.0 as i64))?;
-    statement.bind((4, player.0 as i64))?;
+    statement.bind((":dev", deviation))?;
+    statement.bind((":vol", volatility))?;
+    statement.bind((":last", last_played.0 as i64))?;
+    statement.bind((":id", player.0 as i64))?;
+    statement.bind((":won", if won { 1 } else { 0 }))?;
     statement.next()?;
     Ok(())
 }
@@ -313,8 +314,8 @@ pub fn insert_advantage(
     advantage: f64,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"INSERT INTO "{}_network" (player_A, player_B, advantage)
-            VALUES (min(:a, :b), max(:a, :b), iif(:a > :b, -:v, :v))"#,
+        r#"INSERT INTO "{}_network"
+            VALUES (min(:a, :b), max(:a, :b), iif(:a > :b, -:v, :v), 0, 0)"#,
         dataset
     );
 
@@ -331,10 +332,13 @@ pub fn adjust_advantage(
     player1: PlayerId,
     player2: PlayerId,
     adjust: f64,
+    winner: usize,
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"UPDATE "{}_network"
-            SET advantage = advantage + iif(:a > :b, -:v, :v)
+            SET advantage = advantage + iif(:a > :b, -:v, :v),
+                sets_A = iif(:w = (:a > :b), sets_A + 1, sets_A),
+                sets_B = iif(:w = (:b > :a), sets_B + 1, sets_B),
             WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
         dataset
     );
@@ -343,6 +347,7 @@ pub fn adjust_advantage(
     statement.bind((":a", player1.0 as i64))?;
     statement.bind((":b", player2.0 as i64))?;
     statement.bind((":v", adjust))?;
+    statement.bind((":w", winner as i64))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))
 }
 
@@ -391,20 +396,23 @@ pub fn get_edges(
         .try_collect()
 }
 
-pub fn is_isolated(
+pub fn either_isolated(
     connection: &Connection,
     dataset: &str,
-    player: PlayerId,
+    player1: PlayerId,
+    player2: PlayerId,
 ) -> sqlite::Result<bool> {
     let query = format!(
-        r#"SELECT EXISTS(SELECT 1 FROM "{}_network" WHERE player_A = :pl OR player_B = :pl)"#,
+        r#"SELECT EXISTS(SELECT 1 FROM "{}_network"
+            WHERE player_A = :a OR player_B = :a OR player_A = :b OR player_B = :b)"#,
         dataset
     );
 
     match connection
         .prepare(&query)?
         .into_iter()
-        .bind((":pl", player.0 as i64))?
+        .bind((":a", player1.0 as i64))?
+        .bind((":b", player2.0 as i64))?
         .next()
     {
         None => Ok(true),
@@ -421,10 +429,7 @@ pub fn hypothetical_advantage(
 ) -> sqlite::Result<f64> {
     use std::collections::HashSet;
     // Check trivial cases
-    if player1 == player2
-        || is_isolated(connection, dataset, player1)?
-        || is_isolated(connection, dataset, player2)?
-    {
+    if player1 == player2 || either_isolated(connection, dataset, player1, player2)? {
         return Ok(0.0);
     }
 

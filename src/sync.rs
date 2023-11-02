@@ -203,9 +203,9 @@ fn update_from_set(
     drop(it);
 
     let (deviation1, volatility1, last_played1) = get_player_data(connection, dataset, player1)?;
-    let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
-
     let time1 = results.time.0.checked_sub(last_played1.0).unwrap_or(0);
+
+    let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
     let time2 = results.time.0.checked_sub(last_played2.0).unwrap_or(0);
 
     let advantage = match get_advantage(connection, dataset, player1, player2) {
@@ -243,6 +243,7 @@ fn update_from_set(
         results.time,
         dev_new1,
         vol_new1,
+        results.winner == 0,
     )?;
     set_player_data(
         connection,
@@ -251,6 +252,7 @@ fn update_from_set(
         results.time,
         dev_new2,
         vol_new2,
+        results.winner == 1,
     )?;
 
     let decay_rate = metadata.decay_rate;
@@ -262,6 +264,7 @@ fn update_from_set(
         player1,
         player2,
         (1.0 - decay_rate) * (adjust2 - adjust1),
+        results.winner,
     )
 }
 

@@ -1,4 +1,5 @@
-use super::{EntrantId, EventId, PlayerData, PlayerId, QueryUnwrap, Timestamp};
+use super::scalars::*;
+use super::{PlayerData, QueryUnwrap};
 use cynic::GraphQlResponse;
 use schema::schema;
 
@@ -24,7 +25,7 @@ pub struct EventSets {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "EventSetsVars")]
 struct Event {
-    #[arguments(page: $page, perPage: 40, sortType: RECENT)]
+    #[arguments(page: $page, perPage: 30, sortType: RECENT)]
     sets: Option<SetConnection>,
 }
 

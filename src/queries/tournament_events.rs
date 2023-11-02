@@ -1,5 +1,5 @@
+use super::scalars::*;
 use super::QueryUnwrap;
-use super::{EventId, Timestamp, VideogameId};
 use cynic::GraphQlResponse;
 use schema::schema;
 

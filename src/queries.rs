@@ -1,6 +1,5 @@
 use cynic::{GraphQlResponse, QueryBuilder};
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
@@ -15,7 +14,6 @@ pub mod player_info;
 pub use player_info::*;
 
 use crate::error;
-use schema::schema;
 
 // Auth key
 
@@ -42,30 +40,39 @@ pub fn get_auth_token(config_dir: &Path) -> Option<String> {
     }
 }
 
-// Types
+pub mod scalars {
+    use schema::schema;
 
-// HACK: Unfortunately, start.gg seems to use integers for its ID type, whereas
-// cynic always assumes that IDs are strings. To get around that, we define new
-// scalar types that deserialize to u64.
+    // Types
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cynic(graphql_type = "ID")]
-pub struct VideogameId(pub u64);
+    // HACK: Unfortunately, start.gg seems to use integers for its ID type, whereas
+    // cynic always assumes that IDs are strings. To get around that, we define new
+    // scalar types that deserialize to u64.
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cynic(graphql_type = "ID")]
-pub struct EventId(pub u64);
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cynic(graphql_type = "ID")]
+    pub struct VideogameId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cynic(graphql_type = "ID")]
-pub struct EntrantId(pub u64);
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cynic(graphql_type = "ID")]
+    pub struct EventId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cynic(graphql_type = "ID")]
-pub struct PlayerId(pub u64);
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cynic(graphql_type = "ID")]
+    pub struct EntrantId(pub u64);
 
-#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Timestamp(pub u64);
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cynic(graphql_type = "ID")]
+    pub struct PlayerId(pub u64);
+
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cynic(graphql_type = "ID")]
+    pub struct SetId(pub u64);
+
+    #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Timestamp(pub u64);
+}
+pub use scalars::*;
 
 // Query machinery
 
