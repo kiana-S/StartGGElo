@@ -199,6 +199,10 @@ fn update_from_set(
 
     let (deviation1, volatility1, last_played1) = get_player_data(connection, dataset, player1)?;
     let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
+
+    let time1 = results.time.0.checked_sub(last_played1.0).unwrap_or(0);
+    let time2 = results.time.0.checked_sub(last_played2.0).unwrap_or(0);
+
     let advantage = match get_advantage(connection, dataset, player1, player2) {
         Err(e) => Err(e)?,
         Ok(None) => initialize_edge(connection, dataset, metadata.decay_rate, player1, player2)?,
@@ -210,7 +214,7 @@ fn update_from_set(
         volatility1,
         deviation2,
         results.winner == 0,
-        results.time.0 - last_played1.0,
+        time1,
         metadata,
     );
     let (adjust2, dev_new2, vol_new2) = glicko_adjust(
@@ -219,7 +223,7 @@ fn update_from_set(
         volatility2,
         deviation1,
         results.winner == 1,
-        results.time.0 - last_played2.0,
+        time2,
         metadata,
     );
 
@@ -270,13 +274,16 @@ pub fn sync_dataset(
             event.0, i, num_events
         );
 
-        let sets =
+        let mut sets =
             get_event_sets(event, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
 
-        println!("  Updating ratings from event...");
+        if sets.is_empty() {
+            println!("  No valid sets");
+        } else {
+            println!("  Updating ratings from event...");
 
-        sets.into_iter()
-            .try_for_each(|set| update_from_set(connection, dataset, &metadata, set))?;
+            sets.sort_by_key(|set| set.time);
+            sets.into_iter()
     }
     connection.execute("COMMIT;")
 }

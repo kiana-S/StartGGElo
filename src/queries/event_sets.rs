@@ -24,7 +24,7 @@ pub struct EventSets {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "EventSetsVars")]
 struct Event {
-    #[arguments(page: $page, perPage: 50)]
+    #[arguments(page: $page, perPage: 40, sortType: RECENT)]
     sets: Option<SetConnection>,
 }
 
@@ -43,6 +43,7 @@ struct PageInfo {
 #[derive(cynic::QueryFragment, Debug)]
 struct Set {
     start_at: Option<Timestamp>,
+    started_at: Option<Timestamp>,
     #[arguments(includeByes: true)]
     #[cynic(flatten)]
     slots: Vec<SetSlot>,
@@ -125,7 +126,7 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                     })
                     .try_collect()?;
                 Some(SetData {
-                    time: set.start_at?,
+                    time: set.start_at.or(set.started_at)?,
                     teams,
                     winner,
                 })
