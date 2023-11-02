@@ -67,12 +67,17 @@ fn glicko_adjust(
     } else {
         (1..)
             .map(|k| vol_fn(a - k as f64 * tau))
+            .inspect(|x| {
+                if x.is_nan() {
+                    panic!();
+                }
+            })
             .find(|x| x >= &0.0)
             .unwrap()
     };
     let vol_new = f64::exp(illinois_optimize(vol_fn, a, initial_b) / 2.0);
 
-    let dev_time = time_adjust(time as f64 / period as f64, dev_sq, vol_new);
+    let dev_time = time_adjust(time as f64 / period, dev_sq, vol_new);
     let dev_new = 1.0 / (1.0 / dev_time / dev_time + 1.0 / variance).sqrt();
     let adjust = dev_new * dev_new * g_val * (score - exp_val);
 
@@ -227,6 +232,10 @@ fn update_from_set(
         metadata,
     );
 
+    // Set minimum deviation level
+    let dev_new1 = f64::max(dev_new1, 0.2);
+    let dev_new2 = f64::max(dev_new2, 0.2);
+
     set_player_data(
         connection,
         dataset,
@@ -271,7 +280,9 @@ pub fn sync_dataset(
     for (i, event) in events.into_iter().enumerate() {
         println!(
             "Accessing sets from event ID {}... ({}/{})",
-            event.0, i, num_events
+            event.0,
+            i + 1,
+            num_events
         );
 
         let mut sets =
@@ -284,6 +295,8 @@ pub fn sync_dataset(
 
             sets.sort_by_key(|set| set.time);
             sets.into_iter()
+                .try_for_each(|set| update_from_set(connection, dataset, &metadata, set))?;
+        }
     }
     connection.execute("COMMIT;")
 }
