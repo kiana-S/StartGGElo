@@ -8,23 +8,29 @@ use schema::schema;
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct VideogameId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct EventId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct EntrantId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct PlayerId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct SetId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
 pub struct Timestamp(pub u64);
