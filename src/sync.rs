@@ -97,8 +97,6 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     } else if pages == 1 {
         Some(sets_response.sets)
     } else {
-        println!("  (Page 1)");
-
         let mut sets = sets_response.sets;
 
         for page in 2..=pages {
@@ -147,8 +145,6 @@ fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<E
                 .collect::<Vec<_>>(),
         )
     } else {
-        println!("  (Page 1)");
-
         let mut tournaments = tour_response
             .tournaments
             .into_iter()
@@ -244,6 +240,7 @@ fn update_from_set(
         dev_new1,
         vol_new1,
         results.winner == 0,
+        results.id,
     )?;
     set_player_data(
         connection,
@@ -253,6 +250,7 @@ fn update_from_set(
         dev_new2,
         vol_new2,
         results.winner == 1,
+        results.id,
     )?;
 
     let decay_rate = metadata.decay_rate;
@@ -265,6 +263,7 @@ fn update_from_set(
         player2,
         (1.0 - decay_rate) * (adjust2 - adjust1),
         results.winner,
+        results.id,
     )
 }
 
@@ -321,6 +320,7 @@ mod tests {
             "test",
             &metadata(),
             SetData {
+                id: SetId(0),
                 time: Timestamp(0),
                 teams: players,
                 winner: 0,

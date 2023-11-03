@@ -43,6 +43,7 @@ struct PageInfo {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct Set {
+    id: Option<SetId>,
     start_at: Option<Timestamp>,
     started_at: Option<Timestamp>,
     #[arguments(includeByes: true)]
@@ -84,6 +85,7 @@ pub struct EventSetsResponse {
 
 #[derive(Debug)]
 pub struct SetData {
+    pub id: SetId,
     pub time: Timestamp,
     pub teams: Teams<PlayerData>,
     pub winner: usize,
@@ -127,6 +129,7 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                     })
                     .try_collect()?;
                 Some(SetData {
+                    id: set.id?,
                     time: set.start_at.or(set.started_at)?,
                     teams,
                     winner,
