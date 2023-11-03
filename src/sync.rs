@@ -267,6 +267,11 @@ fn update_from_set(
     )
 }
 
+// HACK: Blacklist of events not to access
+// due to the worst bug I have ever encountered in my entire life
+// Why is start.gg like this
+const EVENT_BLACKLIST: &[EventId] = &[EventId(273741)];
+
 pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
@@ -280,6 +285,10 @@ pub fn sync_dataset(
 
     let num_events = events.len();
     for (i, event) in events.into_iter().enumerate() {
+        if EVENT_BLACKLIST.contains(&event) {
+            continue;
+        }
+
         println!(
             "Accessing sets from event ID {}... ({}/{})",
             event.0,
