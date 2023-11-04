@@ -41,7 +41,6 @@ fn glicko_adjust(
     time: u64,
     metadata: &DatasetMetadata,
 ) -> (f64, f64, f64) {
-    // TODO: Turn this into dataset metadata
     let period = metadata.period;
     let tau = metadata.tau;
 
@@ -253,17 +252,18 @@ fn update_from_set(
         results.id,
     )?;
 
-    let decay_rate = metadata.decay_rate;
-    adjust_advantages(connection, dataset, player1, decay_rate * adjust1)?;
-    adjust_advantages(connection, dataset, player2, decay_rate * adjust2)?;
-    adjust_advantage(
+    adjust_advantages(
         connection,
         dataset,
+        results.id,
         player1,
         player2,
-        (1.0 - decay_rate) * (adjust2 - adjust1),
         results.winner,
-        results.id,
+        adjust1,
+        adjust2,
+        metadata.decay_rate,
+        metadata.adj_decay_rate,
+        metadata.set_limit,
     )
 }
 

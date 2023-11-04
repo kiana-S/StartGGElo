@@ -14,7 +14,9 @@ pub struct DatasetMetadata {
     pub country: Option<String>,
     pub state: Option<String>,
 
+    pub set_limit: u64,
     pub decay_rate: f64,
+    pub adj_decay_rate: f64,
     pub period: f64,
     pub tau: f64,
 }
@@ -47,7 +49,9 @@ CREATE TABLE IF NOT EXISTS datasets (
     game_name TEXT NOT NULL,
     country TEXT,
     state TEXT,
+    set_limit INTEGER NOT NULL,
     decay_rate REAL NOT NULL,
+    adj_decay_rate REAL NOT NULL,
     period REAL NOT NULL,
     tau REAL NOT NULL
 ) STRICT;";
@@ -85,7 +89,9 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, Dat
                     game_name: r_.read::<&str, _>("game_name").to_owned(),
                     country: r_.read::<Option<&str>, _>("country").map(String::from),
                     state: r_.read::<Option<&str>, _>("state").map(String::from),
+                    set_limit: r_.read::<i64, _>("set_limit") as u64,
                     decay_rate: r_.read::<f64, _>("decay_rate"),
+                    adj_decay_rate: r_.read::<f64, _>("adj_decay_rate"),
                     period: r_.read::<f64, _>("period"),
                     tau: r_.read::<f64, _>("tau"),
                 },
@@ -111,25 +117,35 @@ pub fn new_dataset(
     dataset: &str,
     metadata: DatasetMetadata,
 ) -> sqlite::Result<()> {
-    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
+    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY,
     name TEXT,
     prefix TEXT,
+    last_played INTEGER NOT NULL,
     deviation REAL NOT NULL,
     volatility REAL NOT NULL,
+
     sets_won TEXT NOT NULL,
+    sets_count_won INTEGER AS (length(sets_won) - length(replace(sets_won, ',', ''))),
     sets_lost TEXT NOT NULL,
-    last_played INTEGER NOT NULL
-);
+    sets_count_lost INTEGER AS (length(sets_lost) - length(replace(sets_lost, ',', ''))),
+    sets TEXT AS (sets_won || sets_lost),
+    sets_count INTEGER AS (sets_count_won + sets_count_lost)
+) STRICT;
 
 CREATE TABLE "{0}_network" (
     player_A INTEGER NOT NULL,
     player_B INTEGER NOT NULL,
     advantage REAL NOT NULL,
+
     sets_A TEXT NOT NULL,
+    sets_count_A INTEGER AS (length(sets_A) - length(replace(sets_A, ',', ''))),
     sets_B TEXT NOT NULL,
+    sets_count_B INTEGER AS (length(sets_B) - length(replace(sets_B, ',', ''))),
+    sets TEXT AS (sets_A || sets_B),
+    sets_count INTEGER AS (sets_count_A + sets_count_B),
 
     UNIQUE (player_A, player_B),
     CHECK (player_A < player_B),
@@ -144,9 +160,10 @@ CREATE INDEX "{0}_network_B"
     ON "{0}_network" (player_B);
 
 CREATE VIEW "{0}_view"
-    (player_A_id, player_B_id, player_A_name, player_B_name, advantage, sets_A, sets_B, sets) AS
+    (player_A_id, player_B_id, player_A_name, player_B_name, advantage,
+    sets_A, sets_count_A, sets_B, sets_count_B, sets, sets_count) AS
     SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage,
-        sets_A, sets_B, sets_A || sets_B FROM "{0}_network"
+        sets_A, sets_count_A, sets_B, sets_count_B, network.sets, network.sets_count FROM "{0}_network" network
     INNER JOIN "{0}_players" players_A ON player_A = players_A.id
     INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
         dataset
@@ -161,9 +178,11 @@ CREATE VIEW "{0}_view"
         .bind((4, &metadata.game_name[..]))?
         .bind((5, metadata.country.as_deref()))?
         .bind((6, metadata.state.as_deref()))?
-        .bind((7, metadata.decay_rate))?
-        .bind((8, metadata.period))?
-        .bind((9, metadata.tau))?
+        .bind((7, metadata.set_limit as i64))?
+        .bind((8, metadata.decay_rate))?
+        .bind((9, metadata.adj_decay_rate))?
+        .bind((10, metadata.period))?
+        .bind((11, metadata.tau))?
         .try_for_each(|x| x.map(|_| ()))?;
 
     connection.execute(query2)
@@ -188,7 +207,9 @@ pub fn get_metadata(
                 game_name: r_.read::<&str, _>("game_name").to_owned(),
                 country: r_.read::<Option<&str>, _>("country").map(String::from),
                 state: r_.read::<Option<&str>, _>("state").map(String::from),
+                set_limit: r_.read::<i64, _>("set_limit") as u64,
                 decay_rate: r_.read::<f64, _>("decay_rate"),
+                adj_decay_rate: r_.read::<f64, _>("adj_decay_rate"),
                 period: r_.read::<f64, _>("period"),
                 tau: r_.read::<f64, _>("tau"),
             })
@@ -222,7 +243,8 @@ pub fn add_players(
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"INSERT OR IGNORE INTO "{}_players"
-            VALUES (?, ?, ?, 2.01, 0.06, '', '', ?)"#,
+            (id, name, prefix, last_played, deviation, volatility, sets_won, sets_lost)
+            VALUES (?, ?, ?, ?, 2.01, 0.06, '', '')"#,
         dataset
     );
 
@@ -318,6 +340,7 @@ pub fn insert_advantage(
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"INSERT INTO "{}_network"
+            (player_A, player_B, advantage, sets_A, sets_B)
             VALUES (min(:a, :b), max(:a, :b), iif(:a > :b, -:v, :v), '', '')"#,
         dataset
     );
@@ -329,49 +352,60 @@ pub fn insert_advantage(
     statement.into_iter().try_for_each(|x| x.map(|_| ()))
 }
 
-pub fn adjust_advantage(
-    connection: &Connection,
-    dataset: &str,
-    player1: PlayerId,
-    player2: PlayerId,
-    adjust: f64,
-    winner: usize,
-    set: SetId,
-) -> sqlite::Result<()> {
-    let query = format!(
-        r#"UPDATE "{}_network"
-            SET advantage = advantage + iif(:a > :b, -:v, :v),
-                sets_A = iif(:w = (:a > :b), sets_A || :set || ',', sets_A),
-                sets_B = iif(:w = (:b > :a), sets_B || :set || ',', sets_B)
-            WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
-        dataset
-    );
-
-    let mut statement = connection.prepare(&query)?;
-    statement.bind((":a", player1.0 as i64))?;
-    statement.bind((":b", player2.0 as i64))?;
-    statement.bind((":v", adjust))?;
-    statement.bind((":w", winner as i64))?;
-    statement.bind((":set", set.0 as i64))?;
-    statement.into_iter().try_for_each(|x| x.map(|_| ()))
-}
-
 pub fn adjust_advantages(
     connection: &Connection,
     dataset: &str,
-    player: PlayerId,
-    adjust: f64,
+    set: SetId,
+    player1: PlayerId,
+    player2: PlayerId,
+    winner: usize,
+    adjust1: f64,
+    adjust2: f64,
+    decay_rate: f64,
+    adj_decay_rate: f64,
+    set_limit: u64,
 ) -> sqlite::Result<()> {
-    let query = format!(
+    let query1 = format!(
         r#"UPDATE "{}_network"
-            SET advantage = advantage + iif(:pl = player_A, -:v, :v)
-            WHERE player_A = :pl OR player_B = :pl"#,
+SET advantage = advantage + iif(:pl = player_A, -:v, :v)
+                * iif(sets_count >= :sl, :d, :da)
+WHERE (player_A = :pl AND player_B != :plo)
+    OR (player_B = :pl AND player_A != :plo)"#,
+        dataset
+    );
+    let query2 = format!(
+        r#"UPDATE "{}_network"
+SET advantage = advantage + iif(:a > :b, -:v, :v),
+    sets_A = iif(:w = (:a > :b), sets_A || :set || ',', sets_A),
+    sets_B = iif(:w = (:b > :a), sets_B || :set || ',', sets_B)
+WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
         dataset
     );
 
-    let mut statement = connection.prepare(&query)?;
-    statement.bind((":pl", player.0 as i64))?;
-    statement.bind((":v", adjust))?;
+    let mut statement = connection.prepare(&query1)?;
+    statement.bind((":pl", player1.0 as i64))?;
+    statement.bind((":plo", player2.0 as i64))?;
+    statement.bind((":v", adjust1))?;
+    statement.bind((":sl", set_limit as i64))?;
+    statement.bind((":d", decay_rate))?;
+    statement.bind((":da", adj_decay_rate))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+
+    statement = connection.prepare(&query1)?;
+    statement.bind((":pl", player2.0 as i64))?;
+    statement.bind((":plo", player1.0 as i64))?;
+    statement.bind((":v", adjust2))?;
+    statement.bind((":sl", set_limit as i64))?;
+    statement.bind((":d", decay_rate))?;
+    statement.bind((":da", adj_decay_rate))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+
+    statement = connection.prepare(&query2)?;
+    statement.bind((":a", player1.0 as i64))?;
+    statement.bind((":b", player2.0 as i64))?;
+    statement.bind((":v", adjust2 - adjust1))?;
+    statement.bind((":w", winner as i64))?;
+    statement.bind((":set", set.0 as i64))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))
 }
 
@@ -526,7 +560,9 @@ CREATE TABLE IF NOT EXISTS datasets (
             game_name: String::from("Test Game"),
             country: None,
             state: None,
+            set_limit: 0,
             decay_rate: 0.5,
+            adj_decay_rate: 0.5,
             period: (3600 * 24 * 30) as f64,
             tau: 0.2,
         }

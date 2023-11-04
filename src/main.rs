@@ -247,10 +247,29 @@ State/province to track ratings for (leave empty for none): "
         None
     };
 
+    // Set Limit
+
+    let mut set_limit = 0;
+    print!(
+        "
+\x1b[4mSet Limit\x1b[0m
+
+TODO
+
+Set limit (default 0): "
+    );
+    let set_limit_input = read_string();
+    if !set_limit_input.is_empty() {
+        set_limit = set_limit_input
+            .parse::<u64>()
+            .unwrap_or_else(|_| error("Input is not an integer", 1));
+    }
+
     // Advanced Options
 
     // Defaults
-    let mut decay_rate = 0.5;
+    let mut decay_rate = 0.8;
+    let mut adj_decay_rate = 0.5;
     let mut period_days = 40.0;
     let mut tau = 0.4;
 
@@ -268,13 +287,38 @@ then it is assumed that a player's skill against one opponent always carries
 over to all other opponents. If the decay rate is 0, then all player match-ups
 are assumed to be independent of each other.
 
-Network decay rate (default 0.5): "
+Network decay rate (default 0.8): "
         );
         let decay_rate_input = read_string();
         if !decay_rate_input.is_empty() {
             decay_rate = decay_rate_input
                 .parse::<f64>()
-                .unwrap_or_else(|_| error("Not a number", 1));
+                .unwrap_or_else(|_| error("Input is not a number", 1));
+            if decay_rate < 0.0 || decay_rate > 1.0 {
+                error("Input is not between 0 and 1", 1);
+            }
+        }
+
+        // Decay Rate
+
+        print!(
+            "
+\x1b[4mAdjusted Network Decay Rate\x1b[0m
+
+TODO
+
+This should be lower than the regular network decay rate.
+
+Adjusted network decay rate (default 0.5): "
+        );
+        let adj_decay_rate_input = read_string();
+        if !adj_decay_rate_input.is_empty() {
+            adj_decay_rate = adj_decay_rate_input
+                .parse::<f64>()
+                .unwrap_or_else(|_| error("Input is not a number", 1));
+            if decay_rate < 0.0 || decay_rate > 1.0 {
+                error("Input is not between 0 and 1", 1);
+            }
         }
 
         // Rating Period
@@ -294,7 +338,7 @@ Rating period (in days, default 40): "
         if !period_input.is_empty() {
             period_days = period_input
                 .parse::<f64>()
-                .unwrap_or_else(|_| error("Not a number", 1));
+                .unwrap_or_else(|_| error("Input is not a number", 1));
         }
 
         // Tau coefficient
@@ -319,7 +363,7 @@ Tau constant (default 0.4): "
         if !tau_input.is_empty() {
             tau = tau_input
                 .parse::<f64>()
-                .unwrap_or_else(|_| error("Not a number", 1));
+                .unwrap_or_else(|_| error("Input is not a number", 1));
         }
     }
 
@@ -336,7 +380,9 @@ Tau constant (default 0.4): "
             game_name,
             country,
             state,
+            set_limit,
             decay_rate,
+            adj_decay_rate,
             period: (3600 * 24) as f64 * period_days,
             tau,
         },
@@ -371,7 +417,6 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
 
     let all_datasets = list_dataset_names(&connection).unwrap();
 
-    #[allow(unused_must_use)]
     let datasets = if all {
         all_datasets
     } else if datasets.is_empty() {
@@ -398,7 +443,8 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
         sync_dataset(&connection, &dataset, dataset_config, &auth)
-            .unwrap_or_else(|_| error("Error communicating with SQLite", 2));
+            .expect("Error communicating with SQLite");
+        // .unwrap_or_else(|_| error("Error communicating with SQLite", 2));
 
         update_last_sync(&connection, &dataset).expect("Error communicating with SQLite");
     }
