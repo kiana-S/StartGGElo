@@ -1,3 +1,4 @@
+#![feature(binary_heap_as_slice)]
 #![feature(iterator_try_collect)]
 #![feature(extend_one)]
 
@@ -5,6 +6,8 @@ use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::exit;
+use std::time::SystemTime;
+use time_format::strftime_utc;
 
 mod queries;
 use queries::*;
@@ -12,6 +15,10 @@ mod datasets;
 use datasets::*;
 mod sync;
 use sync::*;
+
+const SECS_IN_HR: u64 = 3600;
+const SECS_IN_DAY: u64 = SECS_IN_HR * 24;
+const SECS_IN_WEEK: u64 = SECS_IN_DAY * 7;
 
 pub fn error(msg: &str, code: i32) -> ! {
     println!("\nERROR: {}", msg);
@@ -120,20 +127,66 @@ fn dataset_list() {
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
-    println!();
     for (name, metadata) in datasets {
+        println!();
+
         if let Some(country) = metadata.country {
             if let Some(state) = metadata.state {
                 println!(
-                    "{} - {} (in {}, {})",
+                    "\x1b[1m\x1b[4m{}\x1b[0m - {} (in {}, {})",
                     name, metadata.game_name, country, state
                 );
             } else {
-                println!("{} - {} (in {})", name, metadata.game_name, country);
+                println!(
+                    "\x1b[1m\x1b[4m{}\x1b[0m - {} (in {})",
+                    name, metadata.game_name, country
+                );
             }
         } else {
-            println!("{} - {}", name, metadata.game_name);
+            println!(
+                "\x1b[1m\x1b[4m{}\x1b[0m - {} (Global)",
+                name, metadata.game_name
+            );
         }
+
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_else(|_| error("System time is before the Unix epoch (1970)!", 2))
+            .as_secs();
+        if metadata.last_sync.0 == 1 {
+            print!("\x1b[1m\x1b[91mUnsynced\x1b[0m");
+        } else {
+            print!(
+                "\x1b[1mLast synced:\x1b[0m {}",
+                strftime_utc("%x %X", metadata.last_sync.0 as i64).unwrap()
+            );
+        }
+        if current_time - metadata.last_sync.0 > SECS_IN_WEEK {
+            if name == "default" {
+                print!(" - \x1b[33mRun 'startrnr sync' to update!\x1b[0m");
+            } else {
+                print!(
+                    " - \x1b[33mRun 'startrnr sync \"{}\"' to update!\x1b[0m",
+                    name
+                );
+            }
+        }
+        println!();
+
+        if metadata.set_limit != 0 && metadata.decay_rate != metadata.adj_decay_rate {
+            println!("\x1b[1mSet Limit:\x1b[0m {}", metadata.set_limit);
+            println!(
+                "\x1b[1mNetwork Decay Rate:\x1b[0m {} (adjusted {})",
+                metadata.decay_rate, metadata.adj_decay_rate
+            );
+        } else {
+            println!("\x1b[1mNetwork Decay Rate:\x1b[0m {}", metadata.decay_rate);
+        }
+        println!(
+            "\x1b[1mRating Period:\x1b[0m {} days",
+            metadata.period / SECS_IN_DAY as f64
+        );
+        println!("\x1b[1mTau Constant:\x1b[0m {}", metadata.tau);
     }
 }
 
@@ -383,7 +436,7 @@ Tau constant (default 0.4): "
             set_limit,
             decay_rate,
             adj_decay_rate,
-            period: (3600 * 24) as f64 * period_days,
+            period: SECS_IN_DAY as f64 * period_days,
             tau,
         },
     )
