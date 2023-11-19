@@ -118,7 +118,7 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     }
 }
 
-fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<EventId>> {
+fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<EventData>> {
     println!("Accessing tournaments...");
 
     let tour_response = run_query::<TournamentEvents, _>(
@@ -182,10 +182,13 @@ fn update_from_set(
     connection: &Connection,
     dataset: &str,
     metadata: &DatasetMetadata,
+    event_time: Timestamp,
     results: SetData,
 ) -> sqlite::Result<()> {
     let players_data = results.teams;
-    add_players(connection, dataset, &players_data, results.time)?;
+    // Fall back to event time if set time is not recorded
+    let time = results.time.unwrap_or(event_time);
+    add_players(connection, dataset, &players_data, time)?;
 
     // Non-singles matches are currently not supported
     if players_data.len() != 2 || players_data[0].len() != 1 || players_data[1].len() != 1 {
@@ -198,10 +201,10 @@ fn update_from_set(
     drop(it);
 
     let (deviation1, volatility1, last_played1) = get_player_data(connection, dataset, player1)?;
-    let time1 = results.time.0.checked_sub(last_played1.0).unwrap_or(0);
+    let time1 = time.0.checked_sub(last_played1.0).unwrap_or(0);
 
     let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
-    let time2 = results.time.0.checked_sub(last_played2.0).unwrap_or(0);
+    let time2 = time.0.checked_sub(last_played2.0).unwrap_or(0);
 
     let advantage = match get_advantage(connection, dataset, player1, player2) {
         Err(e) => Err(e)?,
@@ -243,7 +246,7 @@ fn update_from_set(
         connection,
         dataset,
         player1,
-        results.time,
+        time,
         dev_new1,
         vol_new1,
         results.winner == 0,
@@ -253,7 +256,7 @@ fn update_from_set(
         connection,
         dataset,
         player2,
-        results.time,
+        time,
         dev_new2,
         vol_new2,
         results.winner == 1,
@@ -290,13 +293,13 @@ pub fn sync_dataset(
     for (i, event) in events.into_iter().enumerate() {
         println!(
             "Accessing sets from event ID {}... ({}/{})",
-            event.0,
+            event.id.0,
             i + 1,
             num_events
         );
 
         let mut sets =
-            get_event_sets(event, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
+            get_event_sets(event.id, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
 
         if sets.is_empty() {
             println!("  No valid sets");
@@ -304,8 +307,9 @@ pub fn sync_dataset(
             println!("  Updating ratings from event...");
 
             sets.sort_by_key(|set| set.time);
-            sets.into_iter()
-                .try_for_each(|set| update_from_set(connection, dataset, &metadata, set))?;
+            sets.into_iter().try_for_each(|set| {
+                update_from_set(connection, dataset, &metadata, event.time, set)
+            })?;
         }
     }
     connection.execute("COMMIT;")
@@ -327,9 +331,10 @@ mod tests {
             &connection,
             "test",
             &metadata(),
+            Timestamp(0),
             SetData {
                 id: SetId(StringOrInt::Int(0)),
-                time: Timestamp(0),
+                time: None,
                 teams: players,
                 winner: 0,
             },

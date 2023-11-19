@@ -53,7 +53,6 @@ struct PageInfo {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "TournamentEventsVars")]
 struct Tournament {
-    name: Option<String>,
     #[arguments(limit: 99999, filter: { videogameId: [$game_id] })]
     #[cynic(flatten)]
     events: Vec<Event>,
@@ -63,6 +62,7 @@ struct Tournament {
 #[cynic(variables = "TournamentEventsVars")]
 struct Event {
     id: Option<EventId>,
+    start_at: Option<Timestamp>,
 }
 
 // Unwrap
@@ -75,8 +75,13 @@ pub struct TournamentEventResponse {
 
 #[derive(Debug, Clone)]
 pub struct TournamentData {
-    pub name: String,
-    pub events: Vec<EventId>,
+    pub events: Vec<EventData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventData {
+    pub id: EventId,
+    pub time: Timestamp,
 }
 
 impl<'a> QueryUnwrap<TournamentEventsVars<'a>> for TournamentEvents {
@@ -92,11 +97,15 @@ impl<'a> QueryUnwrap<TournamentEventsVars<'a>> for TournamentEvents {
             .into_iter()
             .filter_map(|tour| {
                 Some(TournamentData {
-                    name: tour.name?,
                     events: tour
                         .events
                         .into_iter()
-                        .filter_map(|event| event.id)
+                        .filter_map(|event| {
+                            Some(EventData {
+                                id: event.id?,
+                                time: event.start_at?,
+                            })
+                        })
                         .collect(),
                 })
             })

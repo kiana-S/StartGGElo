@@ -86,7 +86,7 @@ pub struct EventSetsResponse {
 #[derive(Debug)]
 pub struct SetData {
     pub id: SetId,
-    pub time: Timestamp,
+    pub time: Option<Timestamp>,
     pub teams: Teams<PlayerData>,
     pub winner: usize,
 }
@@ -130,7 +130,7 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                     .try_collect()?;
                 Some(SetData {
                     id: set.id?,
-                    time: set.start_at.or(set.started_at)?,
+                    time: set.start_at.or(set.started_at),
                     teams,
                     winner,
                 })
