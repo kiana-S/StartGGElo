@@ -205,7 +205,15 @@ fn update_from_set(
 
     let advantage = match get_advantage(connection, dataset, player1, player2) {
         Err(e) => Err(e)?,
-        Ok(None) => initialize_edge(connection, dataset, metadata.decay_rate, player1, player2)?,
+        Ok(None) => initialize_edge(
+            connection,
+            dataset,
+            player1,
+            player2,
+            metadata.set_limit,
+            metadata.decay_rate,
+            metadata.adj_decay_rate,
+        )?,
         Ok(Some(adv)) => adv,
     };
     let (adjust1, dev_new1, vol_new1) = glicko_adjust(
@@ -239,7 +247,7 @@ fn update_from_set(
         dev_new1,
         vol_new1,
         results.winner == 0,
-        results.id,
+        results.id.clone(),
     )?;
     set_player_data(
         connection,
@@ -249,7 +257,7 @@ fn update_from_set(
         dev_new2,
         vol_new2,
         results.winner == 1,
-        results.id,
+        results.id.clone(),
     )?;
 
     adjust_advantages(
@@ -267,11 +275,6 @@ fn update_from_set(
     )
 }
 
-// HACK: Blacklist of events not to access
-// due to the worst bug I have ever encountered in my entire life
-// Why is start.gg like this
-const EVENT_BLACKLIST: &[EventId] = &[EventId(273741)];
-
 pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
@@ -285,10 +288,6 @@ pub fn sync_dataset(
 
     let num_events = events.len();
     for (i, event) in events.into_iter().enumerate() {
-        if EVENT_BLACKLIST.contains(&event) {
-            continue;
-        }
-
         println!(
             "Accessing sets from event ID {}... ({}/{})",
             event.0,
@@ -329,7 +328,7 @@ mod tests {
             "test",
             &metadata(),
             SetData {
-                id: SetId(0),
+                id: SetId(StringOrInt::Int(0)),
                 time: Timestamp(0),
                 teams: players,
                 winner: 0,
