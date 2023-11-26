@@ -144,8 +144,8 @@ fn dataset_list() {
 
     for (name, metadata) in datasets {
         print!(
-            "\n\x1b[1m\x1b[4m{}\x1b[0m - \
-\x1b]8;;https://www.start.gg/{}\x1b\\{}\x1b]8;;\x1b\\ ",
+            "\n· \x1b[1m\x1b[34m{}\x1b[0m
+\x1b[4m\x1b]8;;https://www.start.gg/{}\x1b\\{}\x1b]8;;\x1b\\\x1b[0m ",
             name, metadata.game_slug, metadata.game_name
         );
 
@@ -168,7 +168,7 @@ fn dataset_list() {
         } else {
             print!(
                 "\x1b[1mLast synced:\x1b[0m {}",
-                strftime_utc("%x %X", metadata.last_sync.0 as i64).unwrap()
+                strftime_utc("%b %e, %Y %I:%M %p", metadata.last_sync.0 as i64).unwrap()
             );
         }
         if current_time - metadata.last_sync.0 > SECS_IN_WEEK {
@@ -252,10 +252,9 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
 
     print!(
         "
-\x1b[4mCountry\x1b[0m
-
+\x1b[1mCountry\x1b[0m
 Enter the two-letter code for the country you want to track ratings in, e.g.
-\"US\" for the United States. See \x1b[1m\x1b]8;;https://www.ups.com/worldshiphelp/\
+\"US\" for the United States. See \x1b[4m\x1b]8;;https://www.ups.com/worldshiphelp/\
 WSA/ENU/AppHelp/mergedProjects/CORE/Codes/Country_Territory_and_Currency_Codes.htm\
 \x1b\\this site\x1b]8;;\x1b\\\x1b[0m for a list of these codes.
 If no code is entered, then the dataset will track all players globally.
@@ -277,10 +276,9 @@ Country to track ratings for (leave empty for none): "
     let state = if country.as_ref().is_some_and(|s| s == "US" || s == "CA") {
         print!(
             "
-\x1b[4mState/Province\x1b[0m
-
+\x1b[1mState/Province\x1b[0m
 Enter the two-letter code for the US state or Canadian province you want to track
-ratings in, e.g. \"CA\" for California. See \x1b[1m\x1b]8;;https://www.ups.com/worldshiphelp/\
+ratings in, e.g. \"CA\" for California. See \x1b[4m\x1b]8;;https://www.ups.com/worldshiphelp/\
 WSA/ENU/AppHelp/mergedProjects/CORE/Codes/State_Province_Codes.htm\x1b\\this site\
 \x1b]8;;\x1b\\\x1b[0m for a list of these codes.
 If no code is entered, then the dataset will track all players within the country.
@@ -305,9 +303,11 @@ State/province to track ratings for (leave empty for none): "
     let mut set_limit = 0;
     print!(
         "
-\x1b[4mSet Limit\x1b[0m
-
-TODO
+\x1b[1mSet Limit\x1b[0m
+The set limit is an optional feature of the rating system that defines how many
+sets must be played between two players for their rating data to be considered
+trustworthy.
+This value should be set low, i.e. not more than 5 or 6.
 
 Set limit (default 0): "
     );
@@ -332,8 +332,7 @@ Set limit (default 0): "
 
         print!(
             "
-\x1b[4mNetwork Decay Rate\x1b[0m
-
+\x1b[1mNetwork Decay Rate\x1b[0m
 The network decay rate is a number between 0 and 1 that controls how the
 advantage network reacts to player wins and losses. If the decay rate is 1,
 then it is assumed that a player's skill against one opponent always carries
@@ -352,25 +351,26 @@ Network decay rate (default 0.8): "
             }
         }
 
-        // Decay Rate
+        // Adjusted Decay Rate
 
-        print!(
-            "
-\x1b[4mAdjusted Network Decay Rate\x1b[0m
-
-TODO
-
-This should be lower than the regular network decay rate.
+        if set_limit != 0 {
+            print!(
+                "
+\x1b[1mAdjusted Network Decay Rate\x1b[0m
+If the number of sets played between two players is less than the set limit,
+then this value is used instead of the regular network decay rate.
+This value should be \x1b[1mlower\x1b[0m than the network decay rate.
 
 Adjusted network decay rate (default 0.5): "
-        );
-        let adj_decay_rate_input = read_string();
-        if !adj_decay_rate_input.is_empty() {
-            adj_decay_rate = adj_decay_rate_input
-                .parse::<f64>()
-                .unwrap_or_else(|_| error("Input is not a number", 1));
-            if decay_rate < 0.0 || decay_rate > 1.0 {
-                error("Input is not between 0 and 1", 1);
+            );
+            let adj_decay_rate_input = read_string();
+            if !adj_decay_rate_input.is_empty() {
+                adj_decay_rate = adj_decay_rate_input
+                    .parse::<f64>()
+                    .unwrap_or_else(|_| error("Input is not a number", 1));
+                if decay_rate < 0.0 || decay_rate > 1.0 {
+                    error("Input is not between 0 and 1", 1);
+                }
             }
         }
 
@@ -378,8 +378,7 @@ Adjusted network decay rate (default 0.5): "
 
         print!(
             "
-\x1b[4mRating Period\x1b[0m
-
+\x1b[1mRating Period\x1b[0m
 The rating period is an interval of time that dictates how player ratings change
 during inactivity. Ideally the rating period should be somewhat long, long
 enough to expect almost every player in the dataset to have played at least a
@@ -398,8 +397,7 @@ Rating period (in days, default 40): "
 
         print!(
             "
-\x1b[4mTau Constant\x1b[0m
-
+\x1b[1mTau Constant\x1b[0m
 The tau constant is an internal system constant that roughly represents how
 much random chance and luck play a role in game outcomes. In games where match
 results are highly predictable, and a player's skill is the sole factor for
@@ -479,11 +477,19 @@ fn player_info(dataset: Option<String>, player: String) {
     let (deviation, volatility, last_played) =
         get_player_rating_data(&connection, &dataset, player_id).unwrap();
 
-    print!("\n\x1b]8;;https://www.start.gg/user/{}\x1b\\", discrim);
+    println!();
     if let Some(pre) = prefix {
-        print!("\x1b[2m{}\x1b[0m ", pre);
+        print!("\x1b[2m{}\x1b[22m ", pre);
     }
-    println!("\x1b[1m{}\x1b[0m\x1b]8;;\x1b\\ ({})", name, discrim);
+    println!(
+        "\x1b[4m\x1b]8;;https://www.start.gg/user/{1}\x1b\\\
+\x1b[1m{0}\x1b[22m\x1b]8;;\x1b\\\x1b[0m ({1})",
+        name, discrim
+    );
+
+    println!("\n\x1b[1mID:\x1b[0m {}", player_id.0);
+    println!("\x1b[1mDeviation:\x1b[0m {}", deviation);
+    println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }
 
 // Sync
