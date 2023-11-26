@@ -5,7 +5,6 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::exit;
 use std::time::SystemTime;
 use time_format::strftime_utc;
 
@@ -15,20 +14,8 @@ mod datasets;
 use datasets::*;
 mod sync;
 use sync::*;
-
-const SECS_IN_HR: u64 = 3600;
-const SECS_IN_DAY: u64 = SECS_IN_HR * 24;
-const SECS_IN_WEEK: u64 = SECS_IN_DAY * 7;
-
-pub fn error(msg: &str, code: i32) -> ! {
-    println!("\nERROR: {}", msg);
-    exit(code)
-}
-
-pub fn issue(msg: &str, code: i32) -> ! {
-    println!("\n{}", msg);
-    exit(code)
-}
+mod util;
+use util::*;
 
 /// ## CLI Structs
 
@@ -188,17 +175,6 @@ fn dataset_list() {
         );
         println!("\x1b[1mTau Constant:\x1b[0m {}", metadata.tau);
     }
-}
-
-fn read_string() -> String {
-    let mut line = String::new();
-    io::stdout()
-        .flush()
-        .unwrap_or_else(|_| error("Could not access stdout", 2));
-    io::stdin()
-        .read_line(&mut line)
-        .unwrap_or_else(|_| error("Could not read from stdin", 2));
-    line.trim().to_owned()
 }
 
 fn dataset_new(name: Option<String>, auth_token: Option<String>) {
