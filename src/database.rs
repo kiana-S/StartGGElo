@@ -56,7 +56,26 @@ CREATE TABLE IF NOT EXISTS datasets (
     adj_decay_rate REAL NOT NULL,
     period REAL NOT NULL,
     tau REAL NOT NULL
-) STRICT;";
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS players (
+    id INTEGER PRIMARY KEY,
+    discrim TEXT NOT NULL,
+    name TEXT NOT NULL,
+    prefix TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS sets (
+    id TEXT UNIQUE NOT NULL,
+    event INTEGER NOT NULL,
+    FOREIGN KEY(event) REFERENCES events
+) STRICT;
+";
 
     let connection = sqlite::open(path)?;
     connection.execute(query)?;
@@ -124,9 +143,6 @@ pub fn new_dataset(
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY,
-    name TEXT,
-    prefix TEXT,
-    slug TEXT NOT NULL,
     last_played INTEGER NOT NULL,
     deviation REAL NOT NULL,
     volatility REAL NOT NULL,
@@ -168,8 +184,8 @@ CREATE VIEW "{0}_view"
     sets_A, sets_count_A, sets_B, sets_count_B, sets, sets_count) AS
     SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage,
         sets_A, sets_count_A, sets_B, sets_count_B, network.sets, network.sets_count FROM "{0}_network" network
-    INNER JOIN "{0}_players" players_A ON player_A = players_A.id
-    INNER JOIN "{0}_players" players_B ON player_B = players_B.id;"#,
+    INNER JOIN players players_A ON player_A = players_A.id
+    INNER JOIN players players_B ON player_B = players_B.id;"#,
         dataset
     );
 
@@ -241,16 +257,35 @@ pub fn update_last_sync(connection: &Connection, dataset: &str) -> sqlite::Resul
 
 // Database Updating
 
+pub fn add_event(connection: &Connection, event: EventId, slug: &str) -> sqlite::Result<()> {
+    let query = "INSERT OR IGNORE INTO events (id, slug) VALUES (?, ?)";
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, event.0 as i64))?;
+    statement.bind((2, slug))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))
+}
+
+pub fn add_set(connection: &Connection, set: &SetId, event: EventId) -> sqlite::Result<()> {
+    let query = "INSERT OR IGNORE INTO sets (id, event) VALUES (?, ?)";
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, &set.0.to_string()[..]))?;
+    statement.bind((2, event.0 as i64))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))
+}
+
 pub fn add_players(
     connection: &Connection,
     dataset: &str,
     teams: &Teams<PlayerData>,
     time: Timestamp,
 ) -> sqlite::Result<()> {
-    let query = format!(
+    let query1 = "INSERT OR IGNORE INTO players (id, discrim, name, prefix) VALUES (?, ?, ?, ?)";
+    let query2 = format!(
         r#"INSERT OR IGNORE INTO "{}_players"
-            (id, name, prefix, slug, last_played, deviation, volatility, sets_won, sets_lost)
-            VALUES (?, ?, ?, ?, ?, 2.01, 0.06, '', '')"#,
+            (id, last_played, deviation, volatility, sets_won, sets_lost)
+            VALUES (?, ?, 2.01, 0.06, '', '')"#,
         dataset
     );
 
@@ -260,29 +295,26 @@ pub fn add_players(
                  id,
                  name,
                  prefix,
-                 slug,
+                 discrim,
              }| {
-                let mut statement = connection.prepare(&query)?;
+                let mut statement = connection.prepare(&query1)?;
                 statement.bind((1, id.0 as i64))?;
-                statement.bind((2, &name[..]))?;
-                statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
-                statement.bind((4, &slug[..]))?;
-                statement.bind((5, time.0 as i64))?;
+                statement.bind((2, &discrim[..]))?;
+                statement.bind((3, &name[..]))?;
+                statement.bind((4, prefix.as_ref().map(|x| &x[..])))?;
+                statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+
+                statement = connection.prepare(&query2)?;
+                statement.bind((1, id.0 as i64))?;
+                statement.bind((2, time.0 as i64))?;
                 statement.into_iter().try_for_each(|x| x.map(|_| ()))
             },
         )
     })
 }
 
-pub fn get_player(
-    connection: &Connection,
-    dataset: &str,
-    player: PlayerId,
-) -> sqlite::Result<PlayerData> {
-    let query = format!(
-        r#"SELECT name, prefix, slug FROM "{}_players" WHERE id = ?"#,
-        dataset
-    );
+pub fn get_player(connection: &Connection, player: PlayerId) -> sqlite::Result<PlayerData> {
+    let query = "SELECT name, prefix, discrim FROM players WHERE id = ?";
 
     let mut statement = connection.prepare(&query)?;
     statement.bind((1, player.0 as i64))?;
@@ -291,11 +323,11 @@ pub fn get_player(
         id: player,
         name: statement.read::<String, _>("name")?,
         prefix: statement.read::<Option<String>, _>("prefix")?,
-        slug: statement.read::<String, _>("slug")?,
+        discrim: statement.read::<String, _>("discrim")?,
     })
 }
 
-pub fn get_player_data(
+pub fn get_player_rating_data(
     connection: &Connection,
     dataset: &str,
     player: PlayerId,
@@ -323,7 +355,7 @@ pub fn set_player_data(
     deviation: f64,
     volatility: f64,
     won: bool,
-    set: SetId,
+    set: &SetId,
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"UPDATE "{}_players" SET deviation = :dev, volatility = :vol, last_played = :last,
@@ -631,7 +663,7 @@ CREATE TABLE IF NOT EXISTS datasets (
                 id: PlayerId(i),
                 name: format!("{}", i),
                 prefix: None,
-                slug: String::from("a"),
+                discrim: String::from("a"),
             })
             .collect()
     }

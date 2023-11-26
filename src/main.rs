@@ -9,8 +9,8 @@ use time_format::strftime_utc;
 
 mod queries;
 use queries::*;
-mod datasets;
-use datasets::*;
+mod database;
+use database::*;
 mod sync;
 use sync::*;
 mod util;
@@ -470,20 +470,20 @@ fn player_info(dataset: Option<String>, player: String) {
     let player_id = PlayerId(player.parse::<u64>().unwrap());
 
     let PlayerData {
-        id,
+        id: _,
         name,
         prefix,
-        slug,
-    } = get_player(&connection, &dataset, player_id).unwrap();
+        discrim,
+    } = get_player(&connection, player_id).unwrap();
 
     let (deviation, volatility, last_played) =
-        get_player_data(&connection, &dataset, player_id).unwrap();
+        get_player_rating_data(&connection, &dataset, player_id).unwrap();
 
-    print!("\n\x1b]8;;https://www.start.gg/{}\x1b\\", slug);
+    print!("\n\x1b]8;;https://www.start.gg/user/{}\x1b\\", discrim);
     if let Some(pre) = prefix {
         print!("\x1b[2m{}\x1b[0m ", pre);
     }
-    println!("\x1b[1m{}\x1b[0m\x1b]8;;\x1b\\ ({})", name, id.0);
+    println!("\x1b[1m{}\x1b[0m\x1b]8;;\x1b\\ ({})", name, discrim);
 }
 
 // Sync

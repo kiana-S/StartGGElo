@@ -28,7 +28,7 @@ struct Player {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct User {
-    slug: Option<String>,
+    discriminator: Option<String>,
 }
 
 // Unwrapping
@@ -38,7 +38,7 @@ pub struct PlayerData {
     pub id: PlayerId,
     pub name: String,
     pub prefix: Option<String>,
-    pub slug: String,
+    pub discrim: String,
 }
 
 impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
@@ -50,7 +50,7 @@ impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
             id: player.id?,
             name: player.gamer_tag?,
             prefix: player.prefix.filter(|pr| !pr.is_empty()),
-            slug: player.user?.slug?,
+            discrim: player.user?.discriminator?,
         })
     }
 }

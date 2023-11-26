@@ -25,7 +25,7 @@ pub struct TournamentEventsVars<'a> {
 pub struct TournamentEvents {
     #[arguments(query: {
         page: $page,
-        perPage: 250,
+        perPage: 225,
         sortBy: "endAt asc",
         filter: {
             past: true,
@@ -62,6 +62,7 @@ struct Tournament {
 #[cynic(variables = "TournamentEventsVars")]
 struct Event {
     id: Option<EventId>,
+    slug: Option<String>,
     start_at: Option<Timestamp>,
 }
 
@@ -81,6 +82,7 @@ pub struct TournamentData {
 #[derive(Debug, Clone)]
 pub struct EventData {
     pub id: EventId,
+    pub slug: String,
     pub time: Timestamp,
 }
 
@@ -103,6 +105,7 @@ impl<'a> QueryUnwrap<TournamentEventsVars<'a>> for TournamentEvents {
                         .filter_map(|event| {
                             Some(EventData {
                                 id: event.id?,
+                                slug: event.slug?,
                                 time: event.start_at?,
                             })
                         })

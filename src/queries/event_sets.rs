@@ -79,7 +79,7 @@ struct Player {
 
 #[derive(cynic::QueryFragment, Debug)]
 struct User {
-    slug: Option<String>,
+    discriminator: Option<String>,
 }
 
 // Unwrap
@@ -129,7 +129,7 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                                     id: p_.id?,
                                     name: p_.gamer_tag?,
                                     prefix: p_.prefix.filter(|pr| !pr.is_empty()),
-                                    slug: p_.user?.slug?,
+                                    discrim: p_.user?.discriminator?,
                                 })
                             })
                             .try_collect()

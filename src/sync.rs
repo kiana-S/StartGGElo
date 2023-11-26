@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::datasets::*;
+use crate::database::*;
 use crate::error;
 use crate::queries::*;
 use sqlite::*;
@@ -200,10 +200,12 @@ fn update_from_set(
     let player2 = it.next().unwrap()[0].id;
     drop(it);
 
-    let (deviation1, volatility1, last_played1) = get_player_data(connection, dataset, player1)?;
+    let (deviation1, volatility1, last_played1) =
+        get_player_rating_data(connection, dataset, player1)?;
     let time1 = time.0.checked_sub(last_played1.0).unwrap_or(0);
 
-    let (deviation2, volatility2, last_played2) = get_player_data(connection, dataset, player1)?;
+    let (deviation2, volatility2, last_played2) =
+        get_player_rating_data(connection, dataset, player1)?;
     let time2 = time.0.checked_sub(last_played2.0).unwrap_or(0);
 
     let advantage = match get_advantage(connection, dataset, player1, player2) {
@@ -250,7 +252,7 @@ fn update_from_set(
         dev_new1,
         vol_new1,
         results.winner == 0,
-        results.id.clone(),
+        &results.id,
     )?;
     set_player_data(
         connection,
@@ -260,7 +262,7 @@ fn update_from_set(
         dev_new2,
         vol_new2,
         results.winner == 1,
-        results.id.clone(),
+        &results.id,
     )?;
 
     adjust_advantages(
@@ -298,6 +300,8 @@ pub fn sync_dataset(
             num_events
         );
 
+        add_event(connection, event.id, &event.slug)?;
+
         let mut sets =
             get_event_sets(event.id, auth).unwrap_or_else(|| error("Could not access start.gg", 1));
 
@@ -308,6 +312,7 @@ pub fn sync_dataset(
 
             sets.sort_by_key(|set| set.time);
             sets.into_iter().try_for_each(|set| {
+                add_set(connection, &set.id, event.id)?;
                 update_from_set(connection, dataset, &metadata, event.time, set)
             })?;
         }
@@ -318,7 +323,7 @@ pub fn sync_dataset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::tests::*;
+    use crate::database::tests::*;
 
     #[test]
     fn glicko_single() -> sqlite::Result<()> {
@@ -344,8 +349,14 @@ mod tests {
             "{:?}",
             get_advantage(&connection, "test", PlayerId(1), PlayerId(2))?.unwrap()
         );
-        println!("{:?}", get_player_data(&connection, "test", PlayerId(1)));
-        println!("{:?}", get_player_data(&connection, "test", PlayerId(2)));
+        println!(
+            "{:?}",
+            get_player_rating_data(&connection, "test", PlayerId(1))
+        );
+        println!(
+            "{:?}",
+            get_player_rating_data(&connection, "test", PlayerId(2))
+        );
 
         Ok(())
     }
