@@ -28,6 +28,7 @@ struct VideogameConnection {
 struct Videogame {
     id: Option<VideogameId>,
     name: Option<String>,
+    slug: Option<String>,
 }
 
 // Unwrapping
@@ -36,6 +37,7 @@ struct Videogame {
 pub struct VideogameData {
     pub id: VideogameId,
     pub name: String,
+    pub slug: String,
 }
 
 impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
@@ -52,6 +54,7 @@ impl<'a> QueryUnwrap<VideogameSearchVars<'a>> for VideogameSearch {
                     Some(VideogameData {
                         id: game.id?,
                         name: game.name?,
+                        slug: game.slug?,
                     })
                 })
                 .collect(),

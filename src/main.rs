@@ -115,25 +115,20 @@ fn dataset_list() {
     let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
     for (name, metadata) in datasets {
-        println!();
+        print!(
+            "\n\x1b[1m\x1b[4m{}\x1b[0m - \
+\x1b]8;;https://www.start.gg/{}\x1b\\{}\x1b]8;;\x1b\\ ",
+            name, metadata.game_slug, metadata.game_name
+        );
 
         if let Some(country) = metadata.country {
             if let Some(state) = metadata.state {
-                println!(
-                    "\x1b[1m\x1b[4m{}\x1b[0m - {} (in {}, {})",
-                    name, metadata.game_name, country, state
-                );
+                println!("(in {}, {})", country, state);
             } else {
-                println!(
-                    "\x1b[1m\x1b[4m{}\x1b[0m - {} (in {})",
-                    name, metadata.game_name, country
-                );
+                println!("(in {})", country);
             }
         } else {
-            println!(
-                "\x1b[1m\x1b[4m{}\x1b[0m - {} (Global)",
-                name, metadata.game_name
-            );
+            println!("(Global)");
         }
 
         let current_time = SystemTime::now()
@@ -222,6 +217,7 @@ fn dataset_new(name: Option<String>, auth_token: Option<String>) {
     let VideogameData {
         id: game_id,
         name: game_name,
+        slug: game_slug,
     } = games[index].clone();
 
     // Location
@@ -407,6 +403,7 @@ Tau constant (default 0.4): "
             last_sync: Timestamp(1),
             game_id,
             game_name,
+            game_slug,
             country,
             state,
             set_limit,
