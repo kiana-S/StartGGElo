@@ -126,6 +126,7 @@ pub fn new_dataset(
     id INTEGER PRIMARY KEY,
     name TEXT,
     prefix TEXT,
+    slug TEXT NOT NULL,
     last_played INTEGER NOT NULL,
     deviation REAL NOT NULL,
     volatility REAL NOT NULL,
@@ -248,20 +249,49 @@ pub fn add_players(
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"INSERT OR IGNORE INTO "{}_players"
-            (id, name, prefix, last_played, deviation, volatility, sets_won, sets_lost)
-            VALUES (?, ?, ?, ?, 2.01, 0.06, '', '')"#,
+            (id, name, prefix, slug, last_played, deviation, volatility, sets_won, sets_lost)
+            VALUES (?, ?, ?, ?, ?, 2.01, 0.06, '', '')"#,
         dataset
     );
 
     teams.iter().try_for_each(|team| {
-        team.iter().try_for_each(|PlayerData { id, name, prefix }| {
-            let mut statement = connection.prepare(&query)?;
-            statement.bind((1, id.0 as i64))?;
-            statement.bind((2, name.as_ref().map(|x| &x[..])))?;
-            statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
-            statement.bind((4, time.0 as i64))?;
-            statement.into_iter().try_for_each(|x| x.map(|_| ()))
-        })
+        team.iter().try_for_each(
+            |PlayerData {
+                 id,
+                 name,
+                 prefix,
+                 slug,
+             }| {
+                let mut statement = connection.prepare(&query)?;
+                statement.bind((1, id.0 as i64))?;
+                statement.bind((2, &name[..]))?;
+                statement.bind((3, prefix.as_ref().map(|x| &x[..])))?;
+                statement.bind((4, &slug[..]))?;
+                statement.bind((5, time.0 as i64))?;
+                statement.into_iter().try_for_each(|x| x.map(|_| ()))
+            },
+        )
+    })
+}
+
+pub fn get_player(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+) -> sqlite::Result<PlayerData> {
+    let query = format!(
+        r#"SELECT name, prefix, slug FROM "{}_players" WHERE id = ?"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, player.0 as i64))?;
+    statement.next()?;
+    Ok(PlayerData {
+        id: player,
+        name: statement.read::<String, _>("name")?,
+        prefix: statement.read::<Option<String>, _>("prefix")?,
+        slug: statement.read::<String, _>("slug")?,
     })
 }
 
@@ -599,8 +629,9 @@ CREATE TABLE IF NOT EXISTS datasets (
         (1..=num)
             .map(|i| PlayerData {
                 id: PlayerId(i),
-                name: Some(format!("{}", i)),
+                name: format!("{}", i),
                 prefix: None,
+                slug: String::from("a"),
             })
             .collect()
     }

@@ -3,7 +3,6 @@
 #![feature(extend_one)]
 
 use clap::{Parser, Subcommand};
-use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use time_format::strftime_utc;
@@ -23,7 +22,7 @@ use util::*;
 #[command(name = "StartRNR")]
 #[command(author = "Kiana Sheibani <kiana.a.sheibani@gmail.com>")]
 #[command(version = "0.2.0")]
-#[command(about = "StartRNR - Elo rating calculator for start.gg tournaments", long_about = None)]
+#[command(about = "StartRNR - Rating system for video games based on start.gg", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     subcommand: Subcommands,
@@ -63,8 +62,8 @@ enum Subcommands {
     #[command(
         about = "Sync player ratings",
         long_about = "Pull recent tournament data off of start.gg and use it to
-update the network. This command will automatically keep track of the last time each
-dataset was synced to ensure that each tournament is only accounted for once."
+update player ratings. This command will automatically keep track of the last time
+each dataset was synced to ensure that each tournament is only accounted for once."
     )]
     Sync {
         #[arg(
@@ -76,6 +75,19 @@ created if it does not already exist."
         datasets: Vec<String>,
         #[arg(short, long, help = "Sync all stored databases")]
         all: bool,
+    },
+    #[command(about = "Access player information")]
+    Player {
+        #[command(subcommand)]
+        subcommand: PlayerSC,
+        #[arg(
+            short,
+            long,
+            value_name = "DATASET",
+            global = true,
+            help = "The dataset to access"
+        )]
+        dataset: Option<String>,
     },
 }
 
@@ -89,9 +101,16 @@ enum DatasetSC {
     Delete { name: Option<String> },
 }
 
+#[derive(Subcommand)]
+enum PlayerSC {
+    #[command(about = "Get info of player")]
+    Info { player: String },
+}
+
 fn main() {
     let cli = Cli::parse();
 
+    #[allow(unreachable_patterns)]
     match cli.subcommand {
         Subcommands::Dataset {
             subcommand: DatasetSC::List,
@@ -103,9 +122,18 @@ fn main() {
             subcommand: DatasetSC::Delete { name },
         } => dataset_delete(name),
 
+        Subcommands::Player {
+            subcommand: PlayerSC::Info { player },
+            dataset,
+        } => player_info(dataset, player),
+
         Subcommands::Sync { datasets, all } => sync(datasets, all, cli.auth_token),
+
+        _ => println!("This feature is currently unimplemented."),
     }
 }
+
+// Datasets
 
 fn dataset_list() {
     let config_dir = dirs::config_dir().expect("Could not determine config directory");
@@ -430,6 +458,35 @@ fn dataset_delete(name: Option<String>) {
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     delete_dataset(&connection, &name).unwrap_or_else(|_| error("That dataset does not exist!", 1));
 }
+
+// Players
+
+fn player_info(dataset: Option<String>, player: String) {
+    let config_dir = dirs::config_dir().expect("Could not determine config directory");
+    let dataset = dataset.unwrap_or_else(|| String::from("default"));
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+
+    let player_id = PlayerId(player.parse::<u64>().unwrap());
+
+    let PlayerData {
+        id,
+        name,
+        prefix,
+        slug,
+    } = get_player(&connection, &dataset, player_id).unwrap();
+
+    let (deviation, volatility, last_played) =
+        get_player_data(&connection, &dataset, player_id).unwrap();
+
+    print!("\n\x1b]8;;https://www.start.gg/{}\x1b\\", slug);
+    if let Some(pre) = prefix {
+        print!("\x1b[2m{}\x1b[0m ", pre);
+    }
+    println!("\x1b[1m{}\x1b[0m\x1b]8;;\x1b\\ ({})", name, id.0);
+}
+
+// Sync
 
 fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let config_dir = dirs::config_dir().unwrap();

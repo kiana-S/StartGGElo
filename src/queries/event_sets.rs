@@ -25,7 +25,7 @@ pub struct EventSets {
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(variables = "EventSetsVars")]
 struct Event {
-    #[arguments(page: $page, perPage: 30, sortType: RECENT)]
+    #[arguments(page: $page, perPage: 25, sortType: RECENT)]
     sets: Option<SetConnection>,
 }
 
@@ -74,6 +74,12 @@ struct Player {
     id: Option<PlayerId>,
     gamer_tag: Option<String>,
     prefix: Option<String>,
+    user: Option<User>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+struct User {
+    slug: Option<String>,
 }
 
 // Unwrap
@@ -121,8 +127,9 @@ impl QueryUnwrap<EventSetsVars> for EventSets {
                                 let p_ = p.player?;
                                 Some(PlayerData {
                                     id: p_.id?,
-                                    name: p_.gamer_tag,
-                                    prefix: p_.prefix,
+                                    name: p_.gamer_tag?,
+                                    prefix: p_.prefix.filter(|pr| !pr.is_empty()),
+                                    slug: p_.user?.slug?,
                                 })
                             })
                             .try_collect()

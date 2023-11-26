@@ -23,6 +23,12 @@ struct Player {
     id: Option<PlayerId>,
     gamer_tag: Option<String>,
     prefix: Option<String>,
+    user: Option<User>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+struct User {
+    slug: Option<String>,
 }
 
 // Unwrapping
@@ -30,8 +36,9 @@ struct Player {
 #[derive(Debug, Clone)]
 pub struct PlayerData {
     pub id: PlayerId,
-    pub name: Option<String>,
+    pub name: String,
     pub prefix: Option<String>,
+    pub slug: String,
 }
 
 impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
@@ -41,8 +48,9 @@ impl QueryUnwrap<PlayerInfoVars> for PlayerInfo {
         let player = response.data?.player?;
         Some(PlayerData {
             id: player.id?,
-            name: player.gamer_tag,
+            name: player.gamer_tag?,
             prefix: player.prefix.filter(|pr| !pr.is_empty()),
+            slug: player.user?.slug?,
         })
     }
 }
