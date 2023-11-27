@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS datasets (
 
 CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY,
-    discrim TEXT NOT NULL,
+    discrim TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     prefix TEXT
 ) STRICT;
