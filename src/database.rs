@@ -656,19 +656,41 @@ pub mod tests {
 
     // Mock a database file in transient memory
     pub fn mock_datasets() -> sqlite::Result<Connection> {
-        let query = "PRAGMA foreign_keys = ON;
+    let query = "PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS datasets (
     name TEXT UNIQUE NOT NULL,
     last_sync INTEGER NOT NULL,
     game_id INTEGER NOT NULL,
     game_name TEXT NOT NULL,
+    game_slug TEXT NOT NULL,
     country TEXT,
     state TEXT,
+    set_limit INTEGER NOT NULL,
     decay_rate REAL NOT NULL,
+    adj_decay_rate REAL NOT NULL,
     period REAL NOT NULL,
     tau REAL NOT NULL
-) STRICT;";
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS players (
+    id INTEGER PRIMARY KEY,
+    discrim TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    prefix TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS sets (
+    id TEXT UNIQUE NOT NULL,
+    event INTEGER NOT NULL,
+    FOREIGN KEY(event) REFERENCES events
+) STRICT;
+";
 
         let connection = sqlite::open(":memory:")?;
         connection.execute(query)?;
