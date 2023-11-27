@@ -80,13 +80,7 @@ created if it does not already exist."
     Player {
         #[command(subcommand)]
         subcommand: PlayerSC,
-        #[arg(
-            short,
-            long,
-            value_name = "DATASET",
-            global = true,
-            help = "The dataset to access"
-        )]
+        #[arg(short, long, global = true, help = "The dataset to access")]
         dataset: Option<String>,
     },
 }
@@ -465,17 +459,16 @@ fn player_info(dataset: Option<String>, player: String) {
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
-    let player_id = PlayerId(player.parse::<u64>().unwrap());
-
     let PlayerData {
-        id: _,
+        id,
         name,
         prefix,
         discrim,
-    } = get_player(&connection, player_id).unwrap();
+    } = get_player_from_input(&connection, player)
+        .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (deviation, volatility, last_played) =
-        get_player_rating_data(&connection, &dataset, player_id).unwrap();
+    let (deviation, volatility, _) = get_player_rating_data(&connection, &dataset, id)
+        .unwrap_or_else(|_| error("Could not find player", 1));
 
     println!();
     if let Some(pre) = prefix {
@@ -487,8 +480,8 @@ fn player_info(dataset: Option<String>, player: String) {
         name, discrim
     );
 
-    println!("\n\x1b[1mID:\x1b[0m {}", player_id.0);
-    println!("\x1b[1mDeviation:\x1b[0m {}", deviation);
+    println!("\x1b[1mID:\x1b[0m {}", id.0);
+    println!("\n\x1b[1mDeviation:\x1b[0m {}", deviation);
     println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }
 

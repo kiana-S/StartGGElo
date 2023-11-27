@@ -327,6 +327,42 @@ pub fn get_player(connection: &Connection, player: PlayerId) -> sqlite::Result<P
     })
 }
 
+pub fn get_player_from_discrim(
+    connection: &Connection,
+    discrim: &str,
+) -> sqlite::Result<PlayerData> {
+    let query = "SELECT id, name, prefix FROM players WHERE discrim = ?";
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, discrim))?;
+    statement.next()?;
+    Ok(PlayerData {
+        id: PlayerId(statement.read::<i64, _>("id")? as u64),
+        name: statement.read::<String, _>("name")?,
+        prefix: statement.read::<Option<String>, _>("prefix")?,
+        discrim: discrim.to_owned(),
+    })
+}
+
+pub fn match_player_name(connection: &Connection, name: &str) -> sqlite::Result<Vec<PlayerData>> {
+    let query = "SELECT * FROM players WHERE name LIKE ?";
+
+    connection
+        .prepare(&query)?
+        .into_iter()
+        .bind((1, &format!("%{}%", name)[..]))?
+        .map(|r| {
+            let r_ = r?;
+            Ok(PlayerData {
+                id: PlayerId(r_.read::<i64, _>("id") as u64),
+                name: r_.read::<&str, _>("name").to_owned(),
+                prefix: r_.read::<Option<&str>, _>("prefix").map(|x| x.to_owned()),
+                discrim: r_.read::<&str, _>("discrim").to_owned(),
+            })
+        })
+        .try_collect()
+}
+
 pub fn get_player_rating_data(
     connection: &Connection,
     dataset: &str,
