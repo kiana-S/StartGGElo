@@ -470,6 +470,9 @@ fn player_info(dataset: Option<String>, player: String) {
     let (deviation, volatility, _) = get_player_rating_data(&connection, &dataset, id)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
+    let (won, lost) = get_player_set_counts(&connection, &dataset, id)
+        .unwrap_or_else(|_| error("Could not find player", 1));
+
     println!();
     if let Some(pre) = prefix {
         print!("\x1b[2m{}\x1b[22m ", pre);
@@ -479,8 +482,15 @@ fn player_info(dataset: Option<String>, player: String) {
 \x1b[1m{0}\x1b[22m\x1b]8;;\x1b\\\x1b[0m ({1})",
         name, discrim
     );
-
     println!("\x1b[1mID:\x1b[0m {}", id.0);
+
+    println!(
+        "\n\x1b[1mSet Count:\x1b[0m {} - {} ({:.3}%)",
+        won,
+        lost,
+        (won as f64 / (won + lost) as f64) * 100.0
+    );
+
     println!("\n\x1b[1mDeviation:\x1b[0m {}", deviation);
     println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }

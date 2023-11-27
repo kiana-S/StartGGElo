@@ -323,7 +323,7 @@ pub fn sync_dataset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::tests::*;
+    use crate::datasets::tests::*;
 
     #[test]
     fn glicko_single() -> sqlite::Result<()> {

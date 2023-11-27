@@ -30,6 +30,8 @@ pub fn read_string() -> String {
     line.trim().to_owned()
 }
 
+// Player Input
+
 pub enum PlayerInput {
     Id(PlayerId),
     Discrim(String),

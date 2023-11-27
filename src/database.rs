@@ -383,6 +383,25 @@ pub fn get_player_rating_data(
     ))
 }
 
+pub fn get_player_set_counts(
+    connection: &Connection,
+    dataset: &str,
+    player: PlayerId,
+) -> sqlite::Result<(u64, u64)> {
+    let query = format!(
+        r#"SELECT sets_count_won, sets_count_lost FROM "{}_players" WHERE id = ?"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(&query)?;
+    statement.bind((1, player.0 as i64))?;
+    statement.next()?;
+    Ok((
+        statement.read::<i64, _>("sets_count_won")? as u64,
+        statement.read::<i64, _>("sets_count_lost")? as u64,
+    ))
+}
+
 pub fn set_player_data(
     connection: &Connection,
     dataset: &str,
@@ -656,7 +675,7 @@ pub mod tests {
 
     // Mock a database file in transient memory
     pub fn mock_datasets() -> sqlite::Result<Connection> {
-    let query = "PRAGMA foreign_keys = ON;
+        let query = "PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS datasets (
     name TEXT UNIQUE NOT NULL,
@@ -751,8 +770,7 @@ CREATE TABLE IF NOT EXISTS sets (
 
         add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
 
-        let mut statement =
-            connection.prepare("SELECT * FROM dataset_test_players WHERE id = 1")?;
+        let mut statement = connection.prepare("SELECT * FROM players WHERE id = 1")?;
         statement.next()?;
         assert_eq!(statement.read::<i64, _>("id")?, 1);
         assert_eq!(statement.read::<String, _>("name")?, "1");

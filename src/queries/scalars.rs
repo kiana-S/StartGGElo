@@ -14,6 +14,15 @@ pub enum StringOrInt {
     Int(u64),
 }
 
+impl StringOrInt {
+    pub fn from_string(s: &str) -> Self {
+        match s.parse::<u64>() {
+            Ok(x) => StringOrInt::Int(x),
+            Err(_) => StringOrInt::String(s.to_owned()),
+        }
+    }
+}
+
 impl Display for StringOrInt {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error> {
         match self {
