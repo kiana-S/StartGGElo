@@ -316,7 +316,7 @@ Set limit (default 0): "
 
     // Defaults
     let mut decay_rate = 0.8;
-    let mut adj_decay_rate = 0.5;
+    let mut adj_decay_rate = 0.6;
     let mut period_days = 40.0;
     let mut tau = 0.4;
 
@@ -355,7 +355,7 @@ If the number of sets played between two players is less than the set limit,
 then this value is used instead of the regular network decay rate.
 This value should be \x1b[1mlower\x1b[0m than the network decay rate.
 
-Adjusted network decay rate (default 0.5): "
+Adjusted network decay rate (default 0.6): "
             );
             let adj_decay_rate_input = read_string();
             if !adj_decay_rate_input.is_empty() {
