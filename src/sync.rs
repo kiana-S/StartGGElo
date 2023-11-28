@@ -265,6 +265,13 @@ fn update_from_set(
         &results.id,
     )?;
 
+    let (sets1, sets2) = get_matchup_set_counts(connection, dataset, player1, player2)?;
+    let decay_rate = if sets1 + sets2 >= metadata.set_limit {
+        metadata.decay_rate
+    } else {
+        metadata.adj_decay_rate
+    };
+
     adjust_advantages(
         connection,
         dataset,
@@ -274,9 +281,7 @@ fn update_from_set(
         results.winner,
         adjust1,
         adjust2,
-        metadata.decay_rate,
-        metadata.adj_decay_rate,
-        metadata.set_limit,
+        decay_rate,
     )
 }
 
@@ -323,7 +328,7 @@ pub fn sync_dataset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::tests::*;
+    use crate::database::tests::*;
 
     #[test]
     fn glicko_single() -> sqlite::Result<()> {
