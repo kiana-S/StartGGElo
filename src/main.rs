@@ -170,7 +170,7 @@ fn dataset_list() {
                 print!(" - \x1b[33mRun 'startrnr sync' to update!\x1b[0m");
             } else {
                 print!(
-                    " - \x1b[33mRun 'startrnr sync \"{}\"' to update!\x1b[0m",
+                    " - \x1b[33mRun 'startrnr sync {:?}' to update!\x1b[0m",
                     name
                 );
             }
@@ -529,15 +529,18 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
         datasets
     };
 
+    let current_time = current_time();
+
     for dataset in datasets {
         let dataset_config = get_metadata(&connection, &dataset)
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(&connection, &dataset, dataset_config, &auth)
+        sync_dataset(&connection, &dataset, dataset_config, current_time, &auth)
             .expect("Error communicating with SQLite");
         // .unwrap_or_else(|_| error("Error communicating with SQLite", 2));
 
-        update_last_sync(&connection, &dataset).expect("Error communicating with SQLite");
+        update_last_sync(&connection, &dataset, current_time)
+            .expect("Error communicating with SQLite");
     }
 }

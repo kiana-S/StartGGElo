@@ -289,6 +289,7 @@ pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
     metadata: DatasetMetadata,
+    current_time: Timestamp,
     auth: &str,
 ) -> sqlite::Result<()> {
     let events = get_tournament_events(&metadata, auth)

@@ -1,10 +1,8 @@
-use crate::error;
 use crate::queries::*;
 use sqlite::*;
 use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 pub struct DatasetMetadata {
     pub last_sync: Timestamp,
@@ -239,18 +237,17 @@ pub fn get_metadata(
         .and_then(Result::ok))
 }
 
-pub fn update_last_sync(connection: &Connection, dataset: &str) -> sqlite::Result<()> {
+pub fn update_last_sync(
+    connection: &Connection,
+    dataset: &str,
+    current_time: Timestamp,
+) -> sqlite::Result<()> {
     let query = "UPDATE datasets SET last_sync = :sync WHERE name = :dataset";
-
-    let current_time = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_else(|_| error("System time is before the Unix epoch (1970)!", 2))
-        .as_secs();
 
     connection
         .prepare(query)?
         .into_iter()
-        .bind((":sync", current_time as i64))?
+        .bind((":sync", current_time.0 as i64))?
         .bind((":dataset", dataset))?
         .try_for_each(|x| x.map(|_| ()))
 }

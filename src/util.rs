@@ -1,9 +1,10 @@
 use sqlite::*;
 use std::io::{self, Write};
 use std::process::exit;
+use std::time::SystemTime;
 
 use crate::database::*;
-use crate::queries::{PlayerData, PlayerId};
+use crate::queries::{PlayerData, PlayerId, Timestamp};
 
 pub const SECS_IN_HR: u64 = 3600;
 pub const SECS_IN_DAY: u64 = SECS_IN_HR * 24;
@@ -17,6 +18,15 @@ pub fn error(msg: &str, code: i32) -> ! {
 pub fn issue(msg: &str, code: i32) -> ! {
     println!("\n{}", msg);
     exit(code)
+}
+
+pub fn current_time() -> Timestamp {
+    Timestamp(
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_else(|_| error("System time is before the Unix epoch (1970)!", 2))
+            .as_secs(),
+    )
 }
 
 pub fn read_string() -> String {
