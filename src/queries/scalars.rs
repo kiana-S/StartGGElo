@@ -42,6 +42,11 @@ pub struct VideogameId(pub u64);
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cynic(graphql_type = "ID")]
 #[repr(transparent)]
+pub struct TournamentId(pub u64);
+
+#[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cynic(graphql_type = "ID")]
+#[repr(transparent)]
 pub struct EventId(pub u64);
 
 #[derive(cynic::Scalar, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

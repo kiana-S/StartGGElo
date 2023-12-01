@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::database::*;
 use crate::error;
 use crate::queries::*;
+use itertools::Itertools;
 use sqlite::*;
 
 // Glicko-2 system calculation
@@ -118,62 +119,72 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
     }
 }
 
-fn get_tournament_events(metadata: &DatasetMetadata, auth: &str) -> Option<Vec<EventData>> {
+fn get_tournament_events(
+    metadata: &DatasetMetadata,
+    current_time: Timestamp,
+    auth: &str,
+) -> Option<Vec<EventData>> {
     println!("Accessing tournaments...");
+
+    let mut after = metadata.last_sync;
 
     let tour_response = run_query::<TournamentEvents, _>(
         TournamentEventsVars {
-            last_sync: metadata.last_sync,
+            after_date: after,
+            before_date: current_time,
             game_id: metadata.game_id,
             country: metadata.country.as_deref(),
             state: metadata.state.as_deref(),
-            page: 1,
         },
         auth,
     )?;
 
-    let pages = tour_response.pages;
-    if pages == 0 {
-        Some(vec![])
-    } else if pages == 1 {
-        Some(
-            tour_response
-                .tournaments
-                .into_iter()
-                .flat_map(|tour| tour.events)
-                .collect::<Vec<_>>(),
-        )
+    let mut cont = !tour_response.is_empty();
+    after = if tour_response.iter().any(|tour| tour.time != after) {
+        tour_response.last().unwrap().time
     } else {
-        let mut tournaments = tour_response
-            .tournaments
-            .into_iter()
-            .flat_map(|tour| tour.events)
-            .collect::<Vec<_>>();
+        Timestamp(after.0 + 1)
+    };
 
-        for page in 2..=pages {
-            println!("  (Page {})", page);
+    let mut tournaments = tour_response;
 
-            let next_response = run_query::<TournamentEvents, _>(
-                TournamentEventsVars {
-                    last_sync: metadata.last_sync,
-                    game_id: metadata.game_id,
-                    country: metadata.country.as_deref(),
-                    state: metadata.state.as_deref(),
-                    page,
-                },
-                auth,
-            )?;
+    let mut page: u64 = 1;
+    while cont {
+        page += 1;
+        println!("  (Page {})", page);
 
-            tournaments.extend(
-                next_response
-                    .tournaments
-                    .into_iter()
-                    .flat_map(|tour| tour.events),
-            );
-        }
+        let next_response = run_query::<TournamentEvents, _>(
+            TournamentEventsVars {
+                after_date: after,
+                before_date: current_time,
+                game_id: metadata.game_id,
+                country: metadata.country.as_deref(),
+                state: metadata.state.as_deref(),
+            },
+            auth,
+        )?;
 
-        Some(tournaments)
+        cont = !next_response.is_empty();
+        after = if next_response.iter().any(|tour| tour.time != after) {
+            next_response.last().unwrap().time
+        } else {
+            Timestamp(after.0 + 1)
+        };
+
+        tournaments.extend(next_response);
     }
+
+    println!("Deduplicating...");
+
+    Some(
+        tournaments
+            .into_iter()
+            .group_by(|tour| tour.time)
+            .into_iter()
+            .flat_map(|(_, group)| group.into_iter().unique_by(|tour| tour.id))
+            .flat_map(|tour| tour.events)
+            .collect::<Vec<_>>(),
+    )
 }
 
 // Dataset syncing
@@ -292,7 +303,7 @@ pub fn sync_dataset(
     current_time: Timestamp,
     auth: &str,
 ) -> sqlite::Result<()> {
-    let events = get_tournament_events(&metadata, auth)
+    let events = get_tournament_events(&metadata, current_time, auth)
         .unwrap_or_else(|| error("Could not access start.gg", 1));
 
     connection.execute("BEGIN;")?;
