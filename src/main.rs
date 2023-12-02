@@ -2,6 +2,7 @@
 #![feature(extend_one)]
 
 use clap::{Parser, Subcommand};
+use sqlite::*;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use time_format::strftime_utc;
@@ -21,7 +22,8 @@ use util::*;
 #[command(name = "StartRNR")]
 #[command(author = "Kiana Sheibani <kiana.a.sheibani@gmail.com>")]
 #[command(version = "0.2.0")]
-#[command(about = "StartRNR - Rating system for video games based on start.gg", long_about = None)]
+#[command(about = "StartRNR - Rating system for competitive video games based on start.gg",
+          long_about = None)]
 struct Cli {
     #[command(subcommand)]
     subcommand: Subcommands,
@@ -101,34 +103,46 @@ enum DatasetSC {
 
 #[derive(Subcommand)]
 enum PlayerSC {
-    #[command(about = "Get info of player")]
+    #[command(about = "Get info about a player")]
     Info { player: String },
 }
 
 fn main() {
     let cli = Cli::parse();
 
+    let config_dir = cli
+        .config_dir
+        .unwrap_or_else(|| dirs::config_dir().expect("Could not determine config directory"));
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+
     #[allow(unreachable_patterns)]
     match cli.subcommand {
         Subcommands::Dataset {
             subcommand: DatasetSC::List,
-        } => dataset_list(),
+        } => dataset_list(&connection),
         Subcommands::Dataset {
             subcommand: DatasetSC::New { name },
-        } => dataset_new(name, cli.auth_token),
+        } => dataset_new(&connection, get_auth_token(&config_dir), name),
         Subcommands::Dataset {
             subcommand: DatasetSC::Delete { name },
-        } => dataset_delete(name),
+        } => dataset_delete(&connection, name),
         Subcommands::Dataset {
             subcommand: DatasetSC::Rename { old, new },
-        } => dataset_rename(old, new),
+        } => dataset_rename(&connection, old, new),
 
         Subcommands::Player {
             subcommand: PlayerSC::Info { player },
             dataset,
-        } => player_info(dataset, player),
+        } => player_info(&connection, dataset, player),
+        Subcommands::Player {
+            subcommand: PlayerSC::Matchup { player1, player2 },
+            dataset,
+        } => player_matchup(&connection, dataset, player1, player2),
 
-        Subcommands::Sync { datasets, all } => sync(datasets, all, cli.auth_token),
+        Subcommands::Sync { datasets, all } => {
+            sync(&connection, get_auth_token(&config_dir), datasets, all)
+        }
 
         _ => println!("This feature is currently unimplemented."),
     }
@@ -136,11 +150,7 @@ fn main() {
 
 // Datasets
 
-fn dataset_list() {
-    let config_dir = dirs::config_dir().expect("Could not determine config directory");
-
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+fn dataset_list(connection: &Connection) {
     let datasets = list_datasets(&connection).expect("Error communicating with SQLite");
 
     for (name, metadata) in datasets {
@@ -201,13 +211,7 @@ fn dataset_list() {
     }
 }
 
-fn dataset_new(name: Option<String>, auth_token: Option<String>) {
-    let config_dir = dirs::config_dir().expect("Could not determine config directory");
-
-    let auth = auth_token
-        .or_else(|| get_auth_token(&config_dir))
-        .unwrap_or_else(|| error("Access token not provided", 1));
-
+fn dataset_new(connection: &Connection, auth: String, name: Option<String>) {
     // Name
 
     let name = name.unwrap_or_else(|| {
@@ -421,10 +425,8 @@ Tau constant (default 0.4): "
 
     // Done configuring
 
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     new_dataset(
-        &connection,
+        connection,
         &name,
         DatasetMetadata {
             last_sync: Timestamp(1),
@@ -445,22 +447,16 @@ Tau constant (default 0.4): "
     println!("\nCreated dataset {}", name);
 }
 
-fn dataset_delete(name: Option<String>) {
-    let config_dir = dirs::config_dir().expect("Could not determine config directory");
-
+fn dataset_delete(connection: &Connection, name: Option<String>) {
     let name = name.unwrap_or_else(|| {
         print!("Dataset to delete: ");
         read_string()
     });
 
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
-    delete_dataset(&connection, &name).unwrap_or_else(|_| error("That dataset does not exist!", 1));
+    delete_dataset(connection, &name).unwrap_or_else(|_| error("That dataset does not exist!", 1));
 }
 
-fn dataset_rename(old: Option<String>, new: Option<String>) {
-    let config_dir = dirs::config_dir().expect("Could not determine config directory");
-
+fn dataset_rename(connection: &Connection, old: Option<String>, new: Option<String>) {
     let old = old.unwrap_or_else(|| {
         print!("Dataset to rename: ");
         read_string()
@@ -470,10 +466,7 @@ fn dataset_rename(old: Option<String>, new: Option<String>) {
         read_string()
     });
 
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
-
-    match rename_dataset(&connection, &old, &new) {
+    match rename_dataset(connection, &old, &new) {
         Ok(()) => (),
         Err(sqlite::Error {
             code: Some(1),
@@ -489,24 +482,21 @@ fn dataset_rename(old: Option<String>, new: Option<String>) {
 
 // Players
 
-fn player_info(dataset: Option<String>, player: String) {
-    let config_dir = dirs::config_dir().expect("Could not determine config directory");
+fn player_info(connection: &Connection, dataset: Option<String>, player: String) {
     let dataset = dataset.unwrap_or_else(|| String::from("default"));
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
     let PlayerData {
         id,
         name,
         prefix,
         discrim,
-    } = get_player_from_input(&connection, player)
+    } = get_player_from_input(connection, player)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (deviation, volatility, _) = get_player_rating_data(&connection, &dataset, id)
+    let (deviation, volatility, _) = get_player_rating_data(connection, &dataset, id)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (won, lost) = get_player_set_counts(&connection, &dataset, id)
+    let (won, lost) = get_player_set_counts(connection, &dataset, id)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
     println!();
@@ -543,7 +533,8 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
-    let all_datasets = list_dataset_names(&connection).unwrap();
+fn sync(connection: &Connection, auth: String, datasets: Vec<String>, all: bool) {
+    let all_datasets = list_dataset_names(connection).unwrap();
 
     let datasets = if all {
         all_datasets
@@ -551,7 +542,7 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
         if all_datasets.is_empty() {
             print!("No datasets exist; create one? (y/n) ");
             if let Some('y') = read_string().chars().next() {
-                dataset_new(Some(String::from("default")), Some(auth.clone()));
+                dataset_new(connection, auth.clone(), Some(String::from("default")));
                 vec![String::from("default")]
             } else {
                 error("No datasets specified and no default dataset", 1)
@@ -568,15 +559,14 @@ fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
     let current_time = current_time();
 
     for dataset in datasets {
-        let dataset_config = get_metadata(&connection, &dataset)
+        let dataset_config = get_metadata(connection, &dataset)
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(&connection, &dataset, dataset_config, current_time, &auth)
+        sync_dataset(connection, &dataset, dataset_config, current_time, &auth)
             .expect("Error communicating with SQLite");
-        // .unwrap_or_else(|_| error("Error communicating with SQLite", 2));
 
-        update_last_sync(&connection, &dataset, current_time)
+        update_last_sync(connection, &dataset, current_time)
             .expect("Error communicating with SQLite");
     }
 }

@@ -413,10 +413,6 @@ pub fn get_matchup_set_counts(
     player1: PlayerId,
     player2: PlayerId,
 ) -> sqlite::Result<(u64, u64)> {
-    if player1 == player2 {
-        return Ok((0, 0));
-    }
-
     let query = format!(
         r#"SELECT iif(:a > :b, sets_count_B, sets_count_A) sets_count_A, iif(:a > :b, sets_count_A, sets_count_B) sets_count_B
             FROM "{}_network" WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
