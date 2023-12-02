@@ -4,7 +4,6 @@
 use clap::{Parser, Subcommand};
 use sqlite::*;
 use std::path::PathBuf;
-use std::time::SystemTime;
 use time_format::strftime_utc;
 
 mod queries;
@@ -172,10 +171,6 @@ fn dataset_list(connection: &Connection) {
             println!("(Global)");
         }
 
-        let current_time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| error("System time is before the Unix epoch (1970)!", 2))
-            .as_secs();
         if metadata.last_sync.0 == 1 {
             print!("\x1b[1m\x1b[91mUnsynced\x1b[0m");
         } else {
@@ -184,7 +179,7 @@ fn dataset_list(connection: &Connection) {
                 strftime_utc("%b %e, %Y %I:%M %p", metadata.last_sync.0 as i64).unwrap()
             );
         }
-        if current_time - metadata.last_sync.0 > SECS_IN_WEEK {
+        if current_time().0 - metadata.last_sync.0 > SECS_IN_WEEK {
             if name == "default" {
                 print!(" - \x1b[33mRun 'startrnr sync' to update!\x1b[0m");
             } else {

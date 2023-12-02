@@ -1,7 +1,6 @@
 use crate::queries::*;
 use sqlite::*;
 use std::fs::{self, OpenOptions};
-use std::io;
 use std::path::{Path, PathBuf};
 
 pub struct DatasetMetadata {
@@ -21,7 +20,7 @@ pub struct DatasetMetadata {
 }
 
 /// Return the path to the datasets file.
-fn datasets_path(config_dir: &Path) -> io::Result<PathBuf> {
+fn datasets_path(config_dir: &Path) -> std::io::Result<PathBuf> {
     let mut path = config_dir.to_owned();
     path.push("startrnr");
 

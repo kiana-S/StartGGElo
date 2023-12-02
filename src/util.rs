@@ -1,7 +1,6 @@
 use sqlite::*;
 use std::io::{self, Write};
 use std::process::exit;
-use std::time::SystemTime;
 
 use crate::database::*;
 use crate::queries::{PlayerData, PlayerId, Timestamp};
@@ -21,6 +20,8 @@ pub fn issue(msg: &str, code: i32) -> ! {
 }
 
 pub fn current_time() -> Timestamp {
+    use std::time::SystemTime;
+
     Timestamp(
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
