@@ -124,9 +124,23 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
     let query = format!(
         r#"DELETE FROM datasets WHERE name = '{0}';
         DROP TABLE "{0}_players";
-        DROP TABLE "{0}_network";
-        DROP VIEW "{0}_view";"#,
+        DROP TABLE "{0}_network";"#,
         dataset
+    );
+
+    connection.execute(query)
+}
+
+pub fn rename_dataset(connection: &Connection, old: &str, new: &str) -> sqlite::Result<()> {
+    let query = format!(
+        r#"UPDATE datasets SET name = '{1}' WHERE name = '{0}';
+ALTER TABLE "{0}_players" RENAME TO "{1}_players";
+ALTER TABLE "{0}_network" RENAME TO "{1}_network";
+DROP INDEX "{0}_network_A";
+CREATE INDEX "{1}_network_A" ON "{1}_network" (player_A);
+DROP INDEX "{0}_network_B";
+CREATE INDEX "{1}_network_B" ON "{1}_network" (player_B);"#,
+        old, new
     );
 
     connection.execute(query)
@@ -172,18 +186,8 @@ CREATE TABLE "{0}_network" (
     FOREIGN KEY(player_B) REFERENCES "{0}_players"
         ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX "{0}_network_A"
-    ON "{0}_network" (player_A);
-CREATE INDEX "{0}_network_B"
-    ON "{0}_network" (player_B);
-
-CREATE VIEW "{0}_view"
-    (player_A_id, player_B_id, player_A_name, player_B_name, advantage,
-    sets_A, sets_count_A, sets_B, sets_count_B, sets, sets_count) AS
-    SELECT players_A.id, players_B.id, players_A.name, players_B.name, advantage,
-        sets_A, sets_count_A, sets_B, sets_count_B, network.sets, network.sets_count FROM "{0}_network" network
-    INNER JOIN players players_A ON player_A = players_A.id
-    INNER JOIN players players_B ON player_B = players_B.id;"#,
+CREATE INDEX "{0}_network_A" ON "{0}_network" (player_A);
+CREATE INDEX "{0}_network_B" ON "{0}_network" (player_B);"#,
         dataset
     );
 

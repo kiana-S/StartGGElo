@@ -1,4 +1,3 @@
-#![feature(binary_heap_as_slice)]
 #![feature(iterator_try_collect)]
 #![feature(extend_one)]
 
@@ -93,6 +92,11 @@ enum DatasetSC {
     New { name: Option<String> },
     #[command(about = "Delete a dataset")]
     Delete { name: Option<String> },
+    #[command(about = "Rename a dataset")]
+    Rename {
+        old: Option<String>,
+        new: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -115,6 +119,9 @@ fn main() {
         Subcommands::Dataset {
             subcommand: DatasetSC::Delete { name },
         } => dataset_delete(name),
+        Subcommands::Dataset {
+            subcommand: DatasetSC::Rename { old, new },
+        } => dataset_rename(old, new),
 
         Subcommands::Player {
             subcommand: PlayerSC::Info { player },
@@ -449,6 +456,23 @@ fn dataset_delete(name: Option<String>) {
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
     delete_dataset(&connection, &name).unwrap_or_else(|_| error("That dataset does not exist!", 1));
+}
+
+fn dataset_rename(old: Option<String>, new: Option<String>) {
+    let config_dir = dirs::config_dir().expect("Could not determine config directory");
+
+    let old = old.unwrap_or_else(|| {
+        print!("Dataset to rename: ");
+        read_string()
+    });
+    let new = new.unwrap_or_else(|| {
+        print!("Rename to: ");
+        read_string()
+    });
+
+    let connection =
+        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+    rename_dataset(&connection, &old, &new).unwrap();
 }
 
 // Players
