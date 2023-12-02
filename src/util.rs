@@ -40,6 +40,26 @@ pub fn read_string() -> String {
     line.trim().to_owned()
 }
 
+pub fn ansi_num_color(num: f64, threshold1: f64, threshold2: f64) -> &'static str {
+    let sign = num > 0.0;
+    let num_abs = num.abs();
+    let severity = if num_abs < threshold1 {
+        0
+    } else if num_abs < threshold2 {
+        1
+    } else {
+        2
+    };
+
+    match (sign, severity) {
+        (false, 1) => "31",
+        (true, 1) => "32",
+        (false, 2) => "91",
+        (true, 2) => "92",
+        _ => "39",
+    }
+}
+
 // Player Input
 
 pub enum PlayerInput {

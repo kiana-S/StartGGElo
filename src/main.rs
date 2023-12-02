@@ -105,6 +105,8 @@ enum DatasetSC {
 enum PlayerSC {
     #[command(about = "Get info about a player")]
     Info { player: String },
+    #[command(about = "Matchup data between two players")]
+    Matchup { player1: String, player2: String },
 }
 
 fn main() {
@@ -521,17 +523,124 @@ fn player_info(connection: &Connection, dataset: Option<String>, player: String)
     println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }
 
+// TODO: Finish
+fn player_matchup(
+    connection: &Connection,
+    dataset: Option<String>,
+    player1: String,
+    player2: String,
+) {
+    let dataset = dataset.unwrap_or_else(|| String::from("default"));
+
+    let PlayerData {
+        id: player1,
+        name: name1,
+        prefix: prefix1,
+        discrim: discrim1,
+    } = get_player_from_input(connection, player1)
+        .unwrap_or_else(|_| error("Could not find player", 1));
+
+    let (deviation1, _, _) = get_player_rating_data(connection, &dataset, player1)
+        .unwrap_or_else(|_| error("Could not find player", 1));
+
+    let PlayerData {
+        id: player2,
+        name: name2,
+        prefix: prefix2,
+        discrim: discrim2,
+    } = get_player_from_input(connection, player2)
+        .unwrap_or_else(|_| error("Could not find player", 1));
+
+    let (deviation2, _, _) = get_player_rating_data(connection, &dataset, player2)
+        .unwrap_or_else(|_| error("Could not find player", 1));
+
+    let (hypothetical, advantage) = get_advantage(connection, &dataset, player1, player2)
+        .expect("Error communicating with SQLite")
+        .map(|x| (false, x))
+        .unwrap_or_else(|| {
+            let metadata = get_metadata(connection, &dataset)
+                .expect("Error communicating with SQLite")
+                .unwrap_or_else(|| error("Dataset not found", 1));
+            (
+                true,
+                hypothetical_advantage(
+                    connection,
+                    &dataset,
+                    player1,
+                    player2,
+                    metadata.set_limit,
+                    metadata.decay_rate,
+                    metadata.adj_decay_rate,
+                )
+                .expect("Error communicating with SQLite"),
+            )
+        });
+
+    let probability = 1.0
+        / (1.0
+            + f64::exp(
+                g_func((deviation1 * deviation1 + deviation2 * deviation2).sqrt()) * advantage,
+            ));
+
+    let color = ansi_num_color(advantage, 0.2, 2.0);
+    let other_color = ansi_num_color(-advantage, 0.2, 2.0);
+
+    let len1 = prefix1.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name1.len();
+    let len2 = prefix2.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name2.len();
+
+    println!();
+    if let Some(pre) = prefix1 {
+        print!("\x1b[2m{}\x1b[22m ", pre);
+    }
+    print!(
+        "\x1b[4m\x1b]8;;https://www.start.gg/user/{}\x1b\\\
+\x1b[1m{}\x1b[22m\x1b]8;;\x1b\\\x1b[0m - ",
+        discrim1, name1
+    );
+    if let Some(pre) = prefix2 {
+        print!("\x1b[2m{}\x1b[22m ", pre);
+    }
+    println!(
+        "\x1b[4m\x1b]8;;https://www.start.gg/user/{}\x1b\\\
+\x1b[1m{}\x1b[22m\x1b]8;;\x1b\\\x1b[0m",
+        discrim2, name2
+    );
+
+    println!(
+        "\x1b[1m\x1b[{4}m{0:>2$}\x1b[0m - \x1b[1m\x1b[{5}m{1:<3$}\x1b[0m",
+        format!("{:.1}%", probability * 100.0),
+        format!("{:.1}%", (1.0 - probability) * 100.0),
+        len1,
+        len2,
+        other_color,
+        color
+    );
+
+    if hypothetical {
+        println!(
+            "\n\x1b[1mHypothetical Advantage: \x1b[{1}m{0:+.4}\x1b[0m",
+            advantage, color
+        );
+    } else {
+        println!(
+            "\n\x1b[1mAdvantage: \x1b[{1}m{0:+.4}\x1b[0m",
+            advantage, color
+        );
+
+        let (a, b) = get_matchup_set_counts(connection, &dataset, player1, player2)
+            .expect("Error communicating with SQLite");
+
+        println!(
+            "\n\x1b[1mSet Count:\x1b[0m {} - {}  ({:.3}% - {:.3}%)",
+            a,
+            b,
+            (a as f64 / (a + b) as f64) * 100.0,
+            (b as f64 / (a + b) as f64) * 100.0
+        );
+    }
+}
+
 // Sync
-
-fn sync(datasets: Vec<String>, all: bool, auth_token: Option<String>) {
-    let config_dir = dirs::config_dir().unwrap();
-
-    let auth = auth_token
-        .or_else(|| get_auth_token(&config_dir))
-        .unwrap_or_else(|| error("Access token not provided", 1));
-
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
 fn sync(connection: &Connection, auth: String, datasets: Vec<String>, all: bool) {
     let all_datasets = list_dataset_names(connection).unwrap();

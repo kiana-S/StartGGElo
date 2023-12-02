@@ -10,6 +10,10 @@ use sqlite::*;
 
 // Glicko-2 system calculation
 
+pub fn g_func(dev: f64) -> f64 {
+    1.0 / (1.0 + 3.0 * dev * dev / PI / PI).sqrt()
+}
+
 fn time_adjust(periods: f64, old_dev_sq: f64, volatility: f64) -> f64 {
     (old_dev_sq + periods * volatility * volatility).sqrt()
 }
@@ -45,7 +49,7 @@ fn glicko_adjust(
     let period = metadata.period;
     let tau = metadata.tau;
 
-    let g_val = 1.0 / (1.0 + 3.0 * other_deviation * other_deviation / PI / PI).sqrt();
+    let g_val = g_func(other_deviation);
     let exp_val = 1.0 / (1.0 + f64::exp(-g_val * advantage));
 
     let variance = 1.0 / (g_val * g_val * exp_val * (1.0 - exp_val));
