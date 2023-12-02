@@ -472,7 +472,19 @@ fn dataset_rename(old: Option<String>, new: Option<String>) {
 
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
-    rename_dataset(&connection, &old, &new).unwrap();
+
+    match rename_dataset(&connection, &old, &new) {
+        Ok(()) => (),
+        Err(sqlite::Error {
+            code: Some(1),
+            message: _,
+        }) => error(&format!("Dataset {:?} does not exist", &old), 1),
+        Err(sqlite::Error {
+            code: Some(19),
+            message: _,
+        }) => error(&format!("Dataset {:?} already exists", &new), 1),
+        Err(_) => error("Unknown error occurred", 2),
+    };
 }
 
 // Players

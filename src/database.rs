@@ -132,6 +132,10 @@ pub fn delete_dataset(connection: &Connection, dataset: &str) -> sqlite::Result<
 }
 
 pub fn rename_dataset(connection: &Connection, old: &str, new: &str) -> sqlite::Result<()> {
+    if old == new {
+        return Ok(());
+    }
+
     let query = format!(
         r#"UPDATE datasets SET name = '{1}' WHERE name = '{0}';
 ALTER TABLE "{0}_players" RENAME TO "{1}_players";
