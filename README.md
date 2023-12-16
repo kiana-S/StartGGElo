@@ -12,7 +12,7 @@ rankings automatically.
 
 **All of these features work for any game, in any region, without restriction.**
 
-> **Warning**<br>
+> [!WARNING]
 > StartRNR is unstable and under active development. The design and user
 > interface of this program is experimental and may be subject to change.
 > 
