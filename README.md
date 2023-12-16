@@ -34,6 +34,30 @@ Alternatively, if you use Nix:
 nix profile install github:kiana-S/StartRNR
 ```
 
+## Usage
+
+Once StartRNR is installed, run:
+
+``` sh
+startrnr sync
+```
+
+The program will walk you through creating a dataset, then run its rating
+algorithm. **This may take up to a few hours to finish running!**
+
+Once the rating data has been generated, these commands can be used to access it:
+
+``` sh
+# Access a player's data
+startrnr player info <player>
+
+# Analyze matchup of two players
+startrnr player matchup <player1> <player2>
+```
+
+A player can be specified by their tag or by their
+[discriminator](https://help.start.gg/en/articles/4855957-discriminators-on-start-gg).
+
 ## Configuration
 
 StartRNR stores its rating databases in its config directory, which is located at:
