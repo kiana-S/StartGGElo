@@ -16,7 +16,7 @@ rankings automatically.
 > StartRNR is unstable and under active development. The design and user
 > interface of this program is experimental and may be subject to change.
 > 
-> Currently, only generating datasets has been implemented.
+> Currently, the power ranking and seeding features have not been implemented.
 
 ## Installation
 
