@@ -38,8 +38,7 @@ fn datasets_path(config_dir: &Path) -> std::io::Result<PathBuf> {
 pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let path = datasets_path(config_dir).unwrap();
 
-    let query = "PRAGMA foreign_keys = ON;
-
+    let query = "
 CREATE TABLE IF NOT EXISTS datasets (
     name TEXT UNIQUE NOT NULL,
     last_sync INTEGER NOT NULL,
@@ -68,10 +67,9 @@ CREATE TABLE IF NOT EXISTS events (
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS sets (
-    id TEXT UNIQUE NOT NULL,
-    event INTEGER NOT NULL,
-    FOREIGN KEY(event) REFERENCES events
-) STRICT;
+    id TEXT PRIMARY KEY,
+    event INTEGER NOT NULL REFERENCES events
+) STRICT, WITHOUT ROWID;
 ";
 
     let connection = sqlite::open(path)?;
@@ -139,8 +137,6 @@ pub fn rename_dataset(connection: &Connection, old: &str, new: &str) -> sqlite::
         r#"UPDATE datasets SET name = '{1}' WHERE name = '{0}';
 ALTER TABLE "{0}_players" RENAME TO "{1}_players";
 ALTER TABLE "{0}_network" RENAME TO "{1}_network";
-DROP INDEX "{0}_network_A";
-CREATE INDEX "{1}_network_A" ON "{1}_network" (player_A);
 DROP INDEX "{0}_network_B";
 CREATE INDEX "{1}_network_B" ON "{1}_network" (player_B);"#,
         old, new
@@ -157,7 +153,7 @@ pub fn new_dataset(
     let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY REFERENCES players,
     last_played INTEGER NOT NULL,
     deviation REAL NOT NULL,
     volatility REAL NOT NULL,
@@ -182,7 +178,7 @@ CREATE TABLE "{0}_network" (
     sets TEXT AS (sets_A || sets_B),
     sets_count INTEGER AS (sets_count_A + sets_count_B),
 
-    UNIQUE (player_A, player_B),
+    PRIMARY KEY (player_A, player_B),
     CHECK (player_A < player_B),
     FOREIGN KEY(player_A) REFERENCES "{0}_players"
         ON DELETE CASCADE,
