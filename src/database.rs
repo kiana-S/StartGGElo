@@ -189,7 +189,6 @@ CREATE TABLE "{0}_network" (
     FOREIGN KEY(player_B) REFERENCES "{0}_players"
         ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX "{0}_network_A" ON "{0}_network" (player_A);
 CREATE INDEX "{0}_network_B" ON "{0}_network" (player_B);"#,
         dataset
     );
