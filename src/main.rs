@@ -1,10 +1,10 @@
 #![feature(iterator_try_collect)]
 #![feature(extend_one)]
 
+use chrono::{Local, TimeZone, Utc};
 use clap::{Parser, Subcommand};
 use sqlite::*;
-use std::path::PathBuf;
-use time_format::strftime_utc;
+use std::{cmp::min, path::PathBuf};
 
 mod queries;
 use queries::*;
@@ -117,7 +117,6 @@ fn main() {
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
-    #[allow(unreachable_patterns)]
     match cli.subcommand {
         Subcommands::Dataset {
             subcommand: DatasetSC::List,
@@ -171,15 +170,42 @@ fn dataset_list(connection: &Connection) {
             println!("(Global)");
         }
 
-        if metadata.last_sync.0 == 1 {
+        let start = if metadata.start.0 != 1 {
+            Some(
+                Utc.timestamp_opt(metadata.start.0 as i64, 0)
+                    .unwrap()
+                    .format("%m/%d/%Y"),
+            )
+        } else {
+            None
+        };
+        let end = metadata
+            .end
+            .map(|x| Utc.timestamp_opt(x.0 as i64, 0).unwrap().format("%m/%d/%Y"));
+
+        match (start, end) {
+            (None, None) => (),
+            (Some(s), None) => println!("after {}", s),
+            (None, Some(e)) => println!("until {}", e),
+            (Some(s), Some(e)) => println!("{} - {}", s, e),
+        }
+
+        if metadata.last_sync == metadata.start {
             print!("\x1b[1m\x1b[91mUnsynced\x1b[0m");
+        } else if Some(metadata.last_sync) == metadata.end {
+            print!("\x1b[1m\x1b[92mComplete\x1b[0m");
         } else {
             print!(
                 "\x1b[1mLast synced:\x1b[0m {}",
-                strftime_utc("%b %e, %Y %I:%M %p", metadata.last_sync.0 as i64).unwrap()
+                Local
+                    .timestamp_opt(metadata.last_sync.0 as i64, 0)
+                    .unwrap()
+                    .format("%b %e, %Y %r")
             );
         }
-        if current_time().0 - metadata.last_sync.0 > SECS_IN_WEEK {
+        if current_time().0 - metadata.last_sync.0 > SECS_IN_WEEK
+            && Some(metadata.last_sync) != metadata.end
+        {
             if name == "default" {
                 print!(" - \x1b[33mRun 'startrnr sync' to update!\x1b[0m");
             } else {
@@ -298,6 +324,70 @@ State/province to track ratings for (leave empty for none): "
         }
     } else {
         None
+    };
+
+    // Interval
+
+    print!(
+        "
+\x1b[1mStart Date\x1b[0m
+The rating system will process tournaments starting at this date. If only a year
+is entered, the date will be the start of that year.
+
+Start date (year, m/y, or m/d/y): "
+    );
+    let start = {
+        let string = read_string();
+        if string.is_empty() {
+            Timestamp(1)
+        } else if string.chars().all(|c| c.is_ascii_digit() || c == '/') {
+            if let Some((y, m, d)) = match string.split('/').collect::<Vec<_>>()[..] {
+                [] => None,
+                [y] => Some((y.parse().unwrap(), 1, 1)),
+                [m, y] => Some((y.parse().unwrap(), m.parse().unwrap(), 1)),
+                [m, d, y] => Some((y.parse().unwrap(), m.parse().unwrap(), d.parse().unwrap())),
+                _ => error("Input is not a date", 1),
+            } {
+                Timestamp(Utc.with_ymd_and_hms(y, m, d, 0, 1, 1).unwrap().timestamp() as u64)
+            } else {
+                Timestamp(1)
+            }
+        } else {
+            error("Input is not a date", 1);
+        }
+    };
+
+    print!(
+        "
+\x1b[1mEnd Date\x1b[0m
+The rating system will stop processing tournaments when it reaches this date. If
+only a year is entered, the date will be the end of that year.
+
+End date (year, m/y, or m/d/y): "
+    );
+    let end = {
+        let string = read_string();
+        if string.is_empty() {
+            None
+        } else if string.chars().all(|c| c.is_ascii_digit() || c == '/') {
+            if let Some((y, m, d)) = match string.split('/').collect::<Vec<_>>()[..] {
+                [] => None,
+                [y] => Some((y.parse().unwrap(), 12, 31)),
+                [m, y] => Some((y.parse().unwrap(), m.parse().unwrap(), 30)),
+                [m, d, y] => Some((y.parse().unwrap(), m.parse().unwrap(), d.parse().unwrap())),
+                _ => error("Input is not a date", 1),
+            } {
+                Some(Timestamp(
+                    Utc.with_ymd_and_hms(y, m, d, 11, 59, 59)
+                        .unwrap()
+                        .timestamp() as u64,
+                ))
+            } else {
+                None
+            }
+        } else {
+            error("Input is not a date", 1);
+        }
     };
 
     // Set Limit
@@ -426,7 +516,9 @@ Tau constant (default 0.4): "
         connection,
         &name,
         DatasetMetadata {
-            last_sync: Timestamp(1),
+            start,
+            end,
+            last_sync: start,
             game_id,
             game_name,
             game_slug,
@@ -663,14 +755,22 @@ fn sync(connection: &Connection, auth: String, datasets: Vec<String>, all: bool)
     let current_time = current_time();
 
     for dataset in datasets {
-        let dataset_config = get_metadata(connection, &dataset)
+        let dataset_metadata = get_metadata(connection, &dataset)
             .expect("Error communicating with SQLite")
             .unwrap_or_else(|| error(&format!("Dataset {} does not exist!", dataset), 1));
 
-        sync_dataset(connection, &dataset, dataset_config, current_time, &auth)
+        let before = dataset_metadata
+            .end
+            .map(|end| min(end, current_time))
+            .unwrap_or(current_time);
+
+        sync_dataset(connection, &dataset, dataset_metadata, before, &auth)
             .expect("Error communicating with SQLite");
 
-        update_last_sync(connection, &dataset, current_time)
-            .expect("Error communicating with SQLite");
+        update_last_sync(connection, &dataset, before).expect("Error communicating with SQLite");
     }
+}
+
+fn ranking_create(connection: &Connection, dataset: Option<String>) {
+    let dataset = dataset.unwrap_or_else(|| String::from("default"));
 }

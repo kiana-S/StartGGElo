@@ -125,7 +125,7 @@ fn get_event_sets(event: EventId, auth: &str) -> Option<Vec<SetData>> {
 
 fn get_tournament_events(
     metadata: &DatasetMetadata,
-    current_time: Timestamp,
+    before: Timestamp,
     auth: &str,
 ) -> Option<Vec<EventData>> {
     println!("Accessing tournaments...");
@@ -135,7 +135,7 @@ fn get_tournament_events(
     let tour_response = run_query::<TournamentEvents, _>(
         TournamentEventsVars {
             after_date: after,
-            before_date: current_time,
+            before_date: before,
             game_id: metadata.game_id,
             country: metadata.country.as_deref(),
             state: metadata.state.as_deref(),
@@ -160,7 +160,7 @@ fn get_tournament_events(
         let next_response = run_query::<TournamentEvents, _>(
             TournamentEventsVars {
                 after_date: after,
-                before_date: current_time,
+                before_date: before,
                 game_id: metadata.game_id,
                 country: metadata.country.as_deref(),
                 state: metadata.state.as_deref(),
@@ -304,10 +304,10 @@ pub fn sync_dataset(
     connection: &Connection,
     dataset: &str,
     metadata: DatasetMetadata,
-    current_time: Timestamp,
+    before: Timestamp,
     auth: &str,
 ) -> sqlite::Result<()> {
-    let events = get_tournament_events(&metadata, current_time, auth)
+    let events = get_tournament_events(&metadata, before, auth)
         .unwrap_or_else(|| error("Could not access start.gg", 1));
 
     connection.execute("BEGIN;")?;

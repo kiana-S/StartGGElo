@@ -4,6 +4,8 @@ use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
 pub struct DatasetMetadata {
+    pub start: Timestamp,
+    pub end: Option<Timestamp>,
     pub last_sync: Timestamp,
 
     pub game_id: VideogameId,
@@ -41,6 +43,8 @@ pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
     let query = "
 CREATE TABLE IF NOT EXISTS datasets (
     name TEXT UNIQUE NOT NULL,
+    start INTEGER NOT NULL,
+    end INTEGER,
     last_sync INTEGER NOT NULL,
     game_id INTEGER NOT NULL,
     game_name TEXT NOT NULL,
@@ -100,6 +104,10 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, Dat
             Ok((
                 r_.read::<&str, _>("name").to_owned(),
                 DatasetMetadata {
+                    start: Timestamp(r_.read::<i64, _>("start") as u64),
+                    end: r_
+                        .read::<Option<i64>, _>("end")
+                        .map(|x| Timestamp(x as u64)),
                     last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                     game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
                     game_name: r_.read::<&str, _>("game_name").to_owned(),
@@ -150,7 +158,7 @@ pub fn new_dataset(
     dataset: &str,
     metadata: DatasetMetadata,
 ) -> sqlite::Result<()> {
-    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
+    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY REFERENCES players,
@@ -193,17 +201,19 @@ CREATE INDEX "{0}_network_B" ON "{0}_network" (player_B);"#,
         .prepare(query1)?
         .into_iter()
         .bind((1, dataset))?
-        .bind((2, metadata.last_sync.0 as i64))?
-        .bind((3, metadata.game_id.0 as i64))?
-        .bind((4, &metadata.game_name[..]))?
-        .bind((5, &metadata.game_slug[..]))?
-        .bind((6, metadata.country.as_deref()))?
-        .bind((7, metadata.state.as_deref()))?
-        .bind((8, metadata.set_limit as i64))?
-        .bind((9, metadata.decay_rate))?
-        .bind((10, metadata.adj_decay_rate))?
-        .bind((11, metadata.period))?
-        .bind((12, metadata.tau))?
+        .bind((2, metadata.start.0 as i64))?
+        .bind((3, metadata.end.map(|x| x.0 as i64)))?
+        .bind((4, metadata.last_sync.0 as i64))?
+        .bind((5, metadata.game_id.0 as i64))?
+        .bind((6, &metadata.game_name[..]))?
+        .bind((7, &metadata.game_slug[..]))?
+        .bind((8, metadata.country.as_deref()))?
+        .bind((9, metadata.state.as_deref()))?
+        .bind((10, metadata.set_limit as i64))?
+        .bind((11, metadata.decay_rate))?
+        .bind((12, metadata.adj_decay_rate))?
+        .bind((13, metadata.period))?
+        .bind((14, metadata.tau))?
         .try_for_each(|x| x.map(|_| ()))?;
 
     connection.execute(query2)
@@ -223,6 +233,10 @@ pub fn get_metadata(
         .map(|r| {
             let r_ = r?;
             Ok(DatasetMetadata {
+                start: Timestamp(r_.read::<i64, _>("start") as u64),
+                end: r_
+                    .read::<Option<i64>, _>("end")
+                    .map(|x| Timestamp(x as u64)),
                 last_sync: Timestamp(r_.read::<i64, _>("last_sync") as u64),
                 game_id: VideogameId(r_.read::<i64, _>("game_id") as u64),
                 game_name: r_.read::<&str, _>("game_name").to_owned(),
@@ -748,6 +762,8 @@ CREATE TABLE IF NOT EXISTS sets (
 
     pub fn metadata() -> DatasetMetadata {
         DatasetMetadata {
+            start: Timestamp(1),
+            end: None,
             last_sync: Timestamp(1),
             game_id: VideogameId(0),
             game_name: String::from("Test Game"),

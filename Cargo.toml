@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 # CLI
 clap = { version = "4.4", features = ["derive"] }
-time-format = "1.1"
+chrono = "0.4"
 
 # GraphQL schema
 schema.path = "schema"
