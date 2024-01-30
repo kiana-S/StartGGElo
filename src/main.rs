@@ -160,7 +160,7 @@ fn dataset_list(connection: &Connection) {
 
     for (name, metadata) in datasets {
         print!(
-            "\n· \x1b[1m\x1b[34m{}\x1b[0m
+            "· \x1b[1m\x1b[34m{}\x1b[0m
 \x1b[4m\x1b]8;;https://www.start.gg/{}\x1b\\{}\x1b]8;;\x1b\\\x1b[0m ",
             name, metadata.game_slug, metadata.game_name
         );
@@ -235,7 +235,7 @@ fn dataset_list(connection: &Connection) {
             "\x1b[1mRating Period:\x1b[0m {} days",
             metadata.period / SECS_IN_DAY as f64
         );
-        println!("\x1b[1mTau Constant:\x1b[0m {}", metadata.tau);
+        println!("\x1b[1mTau Constant:\x1b[0m {}\n", metadata.tau);
     }
 }
 
@@ -593,7 +593,6 @@ fn player_info(connection: &Connection, dataset: Option<String>, player: String)
     let (won, lost) = get_player_set_counts(connection, &dataset, id)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    println!();
     if let Some(pre) = prefix {
         print!("\x1b[2m{}\x1b[22m ", pre);
     }
@@ -680,7 +679,6 @@ fn player_matchup(
     let len1 = prefix1.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name1.len();
     let len2 = prefix2.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name2.len();
 
-    println!();
     if let Some(pre) = prefix1 {
         print!("\x1b[2m{}\x1b[22m ", pre);
     }
