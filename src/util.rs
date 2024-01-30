@@ -10,12 +10,12 @@ pub const SECS_IN_DAY: u64 = SECS_IN_HR * 24;
 pub const SECS_IN_WEEK: u64 = SECS_IN_DAY * 7;
 
 pub fn error(msg: &str, code: i32) -> ! {
-    println!("\nERROR: {}", msg);
+    eprintln!("\nERROR: {}", msg);
     exit(code)
 }
 
 pub fn issue(msg: &str, code: i32) -> ! {
-    println!("\n{}", msg);
+    eprintln!("\n{}", msg);
     exit(code)
 }
 

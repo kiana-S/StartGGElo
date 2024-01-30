@@ -144,7 +144,12 @@ fn main() {
             sync(&connection, get_auth_token(&config_dir), datasets, all)
         }
 
-        _ => println!("This feature is currently unimplemented."),
+        Subcommands::Ranking {
+            subcommand: RankingSC::Create,
+            dataset,
+        } => ranking_create(&connection, dataset),
+
+        _ => eprintln!("This feature is currently unimplemented."),
     }
 }
 
