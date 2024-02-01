@@ -614,7 +614,6 @@ fn player_info(connection: &Connection, dataset: Option<String>, player: String)
     println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }
 
-// TODO: Finish
 fn player_matchup(
     connection: &Connection,
     dataset: Option<String>,
