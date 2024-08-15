@@ -34,6 +34,8 @@ Alternatively, if you use Nix:
 nix profile install github:kiana-S/StartRNR
 ```
 
+You will need to provide a start.gg API token to access tournament data. Details can be found in [INSTALL.md](INSTALL.md).
+
 ## Usage
 
 Once StartRNR is installed, run:
@@ -57,17 +59,6 @@ startrnr player matchup <player1> <player2>
 
 A player can be specified by their tag or by their
 [discriminator](https://help.start.gg/en/articles/4855957-discriminators-on-start-gg).
-
-## Configuration
-
-StartRNR stores its rating databases in its config directory, which is located at:
-
-- Windows: `%APPDATA%\Roaming\startrnr`
-- MacOS: `~/Library/Application Support/startrnr`
-- Linux: `~/.config/startrnr`
-
-This directory can be used to store the authentication token, which is required
-for using StartRNR.
 
 ## Details - The RNR System
 

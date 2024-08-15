@@ -9,23 +9,25 @@ linked to your account. Instructions for generating one can be found in the
 Once you have an auth token, it must be provided to StartRNR. In order, the
 program checks for a token in:
 
-- A command-line flag `--auth`.
-- An environment variable `AUTH_TOKEN`,
-- A file `auth.txt` within the config directory (see the [README](README.md) for
-  a list of directories in each OS).
+1. A command-line flag `--auth`.
+2. An environment variable `AUTH_TOKEN`,
+3. A file `auth.txt` within the config directory:
+  - Windows: `%APPDATA%\Roaming\startrnr/auth.txt`
+  - MacOS: `~/Library/Application Support/startrnr/auth.txt`
+  - Linux: `~/.config/startrnr/auth.txt`
 
 The last method is recommended, as StartRNR can simply read from that file
 whenever it needs to.
 
 ## Step 2: Dependencies
 
-StartRNR is written in Rust, so install the [Rust
-toolchain](https://www.rust-lang.org/tools/install).
+StartRNR requires these dependencies:
 
-In addition, StartRNR needs these run-time dependencies:
+- [Rust](https://www.rust-lang.org/tools/install)
+- [OpenSSL](https://github.com/openssl/openssl#build-and-install)
+- [SQLite](https://www.sqlite.org/download.html)
 
-- [OpenSSL](https://www.openssl.org/)
-- [SQLite](https://www.sqlite.org/)
+Follow the instructions to download and install each.
 
 ## Step 3: Compiling
 
