@@ -45,9 +45,7 @@ AUTH_TOKEN, or in a text file '<CONFIG_DIR>/auth.txt'."
         value_name = "DIR",
         global = true,
         help = "Config directory",
-        long_help = "This flag overrides the default config directory.
-If this directory does not exist, it will be created and a database file will
-be initialized within it."
+        long_help = "This flag overrides the default config directory."
     )]
     config_dir: Option<PathBuf>,
 }
@@ -115,9 +113,14 @@ fn main() {
         .config_dir
         .map(|mut s| { s.push("startrnr"); s })
         .unwrap_or_else(|| dirs::config_dir().expect("Could not determine config directory"));
-    let connection =
-        open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
 
+    let mut data_dir = dirs::data_dir().expect("Could not determine user data directory");
+    data_dir.push("startrnr");
+
+    let connection =
+        open_datasets(&data_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));
+
+    #[allow(unreachable_patterns)]
     match cli.subcommand {
         Subcommands::Dataset {
             subcommand: DatasetSC::List,
