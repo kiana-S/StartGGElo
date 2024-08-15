@@ -113,6 +113,7 @@ fn main() {
 
     let config_dir = cli
         .config_dir
+        .map(|mut s| { s.push("startrnr"); s })
         .unwrap_or_else(|| dirs::config_dir().expect("Could not determine config directory"));
     let connection =
         open_datasets(&config_dir).unwrap_or_else(|_| error("Could not open datasets file", 2));

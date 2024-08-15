@@ -22,9 +22,8 @@ pub struct DatasetMetadata {
 }
 
 /// Return the path to the datasets file.
-fn datasets_path(config_dir: &Path) -> std::io::Result<PathBuf> {
-    let mut path = config_dir.to_owned();
-    path.push("startrnr");
+fn datasets_path(dir: &Path) -> std::io::Result<PathBuf> {
+    let mut path = dir.to_owned();
 
     // Create datasets path if it doesn't exist
     fs::create_dir_all(&path)?;
@@ -37,8 +36,8 @@ fn datasets_path(config_dir: &Path) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-pub fn open_datasets(config_dir: &Path) -> sqlite::Result<Connection> {
-    let path = datasets_path(config_dir).unwrap();
+pub fn open_datasets(dir: &Path) -> sqlite::Result<Connection> {
+    let path = datasets_path(dir).unwrap();
 
     let query = "
 CREATE TABLE IF NOT EXISTS datasets (
