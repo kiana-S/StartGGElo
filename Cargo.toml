@@ -10,12 +10,12 @@ name = "startrnr"
 path = "src/main.rs"
 
 [dependencies]
+# GraphQL schema
+schema.path = "schema"
+
 # CLI
 clap = { version = "4.4", features = ["derive"] }
 chrono = "0.4"
-
-# GraphQL schema
-schema.path = "schema"
 
 # API access
 cynic = { version = "3.2", features = ["http-reqwest-blocking"] }
