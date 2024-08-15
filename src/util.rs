@@ -41,7 +41,7 @@ pub fn read_string() -> String {
     line.trim().to_owned()
 }
 
-pub fn ansi_num_color(num: f64, threshold1: f64, threshold2: f64) -> &'static str {
+pub fn ansi_num_color(num: f64, threshold1: f64, threshold2: f64) -> (&'static str, &'static str) {
     let sign = num > 0.0;
     let num_abs = num.abs();
     let severity = if num_abs < threshold1 {
@@ -53,11 +53,11 @@ pub fn ansi_num_color(num: f64, threshold1: f64, threshold2: f64) -> &'static st
     };
 
     match (sign, severity) {
-        (false, 1) => "31",
-        (true, 1) => "32",
-        (false, 2) => "91",
-        (true, 2) => "92",
-        _ => "39",
+        (false, 1) => ("31", "32"),
+        (true, 1) => ("32", "31"),
+        (false, 2) => ("91", "92"),
+        (true, 2) => ("92", "91"),
+        _ => ("39", "39"),
     }
 }
 

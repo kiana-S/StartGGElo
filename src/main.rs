@@ -676,8 +676,7 @@ fn player_matchup(
                 g_func((deviation1 * deviation1 + deviation2 * deviation2).sqrt()) * advantage,
             ));
 
-    let color = ansi_num_color(advantage, 0.2, 2.0);
-    let other_color = ansi_num_color(-advantage, 0.2, 2.0);
+    let (color, other_color) = ansi_num_color(advantage, 0.2, 2.0);
 
     let len1 = prefix1.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name1.len();
     let len2 = prefix2.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name2.len();
