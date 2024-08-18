@@ -81,6 +81,12 @@ created if it does not already exist."
         #[arg(short, long, global = true, help = "The dataset to access")]
         dataset: Option<String>,
     },
+    Ranking {
+        #[command(subcommand)]
+        subcommand: RankingSC,
+        #[arg(short, long, global = true, help = "The dataset to access")]
+        dataset: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -106,13 +112,20 @@ enum PlayerSC {
     Matchup { player1: String, player2: String },
 }
 
+#[derive(Subcommand)]
+enum RankingSC {
+    #[command(about = "Create a new ranking")]
+    Create,
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    let config_dir = cli
-        .config_dir
-        .map(|mut s| { s.push("startrnr"); s })
-        .unwrap_or_else(|| dirs::config_dir().expect("Could not determine config directory"));
+    let config_dir = cli.config_dir.unwrap_or_else(|| {
+        let mut dir = dirs::config_dir().expect("Could not determine config directory");
+        dir.push("startrnr");
+        dir
+    });
 
     let mut data_dir = dirs::data_dir().expect("Could not determine user data directory");
     data_dir.push("startrnr");
@@ -224,22 +237,10 @@ fn dataset_list(connection: &Connection) {
                 );
             }
         }
-        println!();
-
-        if metadata.set_limit != 0 && metadata.decay_rate != metadata.adj_decay_rate {
-            println!("\x1b[1mSet Limit:\x1b[0m {}", metadata.set_limit);
-            println!(
-                "\x1b[1mNetwork Decay Rate:\x1b[0m {} (adjusted {})",
-                metadata.decay_rate, metadata.adj_decay_rate
-            );
-        } else {
-            println!("\x1b[1mNetwork Decay Rate:\x1b[0m {}", metadata.decay_rate);
-        }
         println!(
-            "\x1b[1mRating Period:\x1b[0m {} days",
-            metadata.period / SECS_IN_DAY as f64
+            "\n\x1b[1mNetwork Decay Constant:\x1b[0m {}",
+            metadata.decay_const
         );
-        println!("\x1b[1mTau Constant:\x1b[0m {}\n", metadata.tau);
     }
 }
 
@@ -399,33 +400,11 @@ End date (year, m/y, or m/d/y): "
         }
     };
 
-    // Set Limit
-
-    let mut set_limit = 0;
-    print!(
-        "
-\x1b[1mSet Limit\x1b[0m
-The set limit is an optional feature of the rating system that defines how many
-sets must be played between two players for their rating data to be considered
-trustworthy.
-This value should be set low, i.e. not more than 5 or 6.
-
-Set limit (default 0): "
-    );
-    let set_limit_input = read_string();
-    if !set_limit_input.is_empty() {
-        set_limit = set_limit_input
-            .parse::<u64>()
-            .unwrap_or_else(|_| error("Input is not an integer", 1));
-    }
-
     // Advanced Options
 
     // Defaults
-    let mut decay_rate = 0.8;
-    let mut adj_decay_rate = 0.6;
-    let mut period_days = 40.0;
-    let mut tau = 0.4;
+    let mut decay_const = 0.9;
+    let mut var_const = (10.0 - 0.04) / SECS_IN_YEAR as f64 / 3.0;
 
     print!("\nConfigure advanced options? (y/n) ");
     if let Some('y') = read_string().chars().next() {
@@ -433,87 +412,42 @@ Set limit (default 0): "
 
         print!(
             "
-\x1b[1mNetwork Decay Rate\x1b[0m
-The network decay rate is a number between 0 and 1 that controls how the
-advantage network reacts to player wins and losses. If the decay rate is 1,
-then it is assumed that a player's skill against one opponent always carries
-over to all other opponents. If the decay rate is 0, then all player match-ups
-are assumed to be independent of each other.
+\x1b[1mNetwork Decay Constant\x1b[0m
+The network decay constant is a number between 0 and 1 that controls how
+player wins and losses propagate throughout the network. If the decay
+constant is 1, then it is assumed that a player's skill against one
+opponent always carries over to all other opponents. If the decay
+constant is 0, then all player match-ups are assumed to be independent of
+each other.
 
-Network decay rate (default 0.8): "
+Network decay constant (default 0.9): "
         );
-        let decay_rate_input = read_string();
-        if !decay_rate_input.is_empty() {
-            decay_rate = decay_rate_input
+        let decay_const_input = read_string();
+        if !decay_const_input.is_empty() {
+            decay_const = decay_const_input
                 .parse::<f64>()
                 .unwrap_or_else(|_| error("Input is not a number", 1));
-            if decay_rate < 0.0 || decay_rate > 1.0 {
+            if decay_const < 0.0 || decay_const > 1.0 {
                 error("Input is not between 0 and 1", 1);
             }
         }
 
-        // Adjusted Decay Rate
-
-        if set_limit != 0 {
-            print!(
-                "
-\x1b[1mAdjusted Network Decay Rate\x1b[0m
-If the number of sets played between two players is less than the set limit,
-then this value is used instead of the regular network decay rate.
-This value should be \x1b[1mlower\x1b[0m than the network decay rate.
-
-Adjusted network decay rate (default 0.6): "
-            );
-            let adj_decay_rate_input = read_string();
-            if !adj_decay_rate_input.is_empty() {
-                adj_decay_rate = adj_decay_rate_input
-                    .parse::<f64>()
-                    .unwrap_or_else(|_| error("Input is not a number", 1));
-                if decay_rate < 0.0 || decay_rate > 1.0 {
-                    error("Input is not between 0 and 1", 1);
-                }
-            }
-        }
-
-        // Rating Period
+        // Variance Constant
 
         print!(
             "
-\x1b[1mRating Period\x1b[0m
-The rating period is an interval of time that dictates how player ratings change
-during inactivity. Ideally the rating period should be somewhat long, long
-enough to expect almost every player in the dataset to have played at least a
-few sets.
+\x1b[1mVariance Rate\x1b[0m
+This constant determines how quickly a player's variance (the uncertainty
+of their rating) increases over time. See the end of \x1b[4m\x1b]8;;http:\
+//www.glicko.net/glicko/glicko.pdf\x1b\\this paper\x1b]8;;\x1b\\\x1b[0m for details
+on how to compute a good value, or you can leave it blank and a reasonable
+default will be chosen.
 
-Rating period (in days, default 40): "
+Variance rate: "
         );
-        let period_input = read_string();
-        if !period_input.is_empty() {
-            period_days = period_input
-                .parse::<f64>()
-                .unwrap_or_else(|_| error("Input is not a number", 1));
-        }
-
-        // Tau coefficient
-
-        print!(
-            "
-\x1b[1mTau Constant\x1b[0m
-The tau constant is an internal system constant that roughly represents how
-much random chance and luck play a role in game outcomes. In games where match
-results are highly predictable, and a player's skill is the sole factor for
-whether they will win, the tau constant should be high (0.9 - 1.2). In games
-where luck matters, and more improbable victories can occur, the tau constant
-should be low (0.2 - 0.4).
-
-The tau constant is set low by default, since skill-based competitive video
-games tend to be on the more luck-heavy side.
-
-Tau constant (default 0.4): "
-        );
-        let tau_input = read_string();
-        if !tau_input.is_empty() {
-            tau = tau_input
+        let var_const_input = read_string();
+        if !var_const_input.is_empty() {
+            var_const = var_const_input
                 .parse::<f64>()
                 .unwrap_or_else(|_| error("Input is not a number", 1));
         }
@@ -533,11 +467,8 @@ Tau constant (default 0.4): "
             game_slug,
             country,
             state,
-            set_limit,
-            decay_rate,
-            adj_decay_rate,
-            period: SECS_IN_DAY as f64 * period_days,
-            tau,
+            decay_const,
+            var_const,
         },
     )
     .expect("Error communicating with SQLite");
@@ -591,9 +522,6 @@ fn player_info(connection: &Connection, dataset: Option<String>, player: String)
     } = get_player_from_input(connection, player)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (deviation, volatility, _) = get_player_rating_data(connection, &dataset, id)
-        .unwrap_or_else(|_| error("Could not find player", 1));
-
     let (won, lost) = get_player_set_counts(connection, &dataset, id)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
@@ -613,9 +541,6 @@ fn player_info(connection: &Connection, dataset: Option<String>, player: String)
         lost,
         (won as f64 / (won + lost) as f64) * 100.0
     );
-
-    println!("\n\x1b[1mDeviation:\x1b[0m {}", deviation);
-    println!("\x1b[1mVolatility:\x1b[0m {}", volatility);
 }
 
 fn player_matchup(
@@ -634,9 +559,6 @@ fn player_matchup(
     } = get_player_from_input(connection, player1)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (deviation1, _, _) = get_player_rating_data(connection, &dataset, player1)
-        .unwrap_or_else(|_| error("Could not find player", 1));
-
     let PlayerData {
         id: player2,
         name: name2,
@@ -645,41 +567,33 @@ fn player_matchup(
     } = get_player_from_input(connection, player2)
         .unwrap_or_else(|_| error("Could not find player", 1));
 
-    let (deviation2, _, _) = get_player_rating_data(connection, &dataset, player2)
-        .unwrap_or_else(|_| error("Could not find player", 1));
-
-    let (hypothetical, advantage) = get_advantage(connection, &dataset, player1, player2)
-        .expect("Error communicating with SQLite")
-        .map(|x| (false, x))
-        .unwrap_or_else(|| {
-            let metadata = get_metadata(connection, &dataset)
-                .expect("Error communicating with SQLite")
-                .unwrap_or_else(|| error("Dataset not found", 1));
-            (
-                true,
-                hypothetical_advantage(
+    let (hypothetical, advantage, variance) =
+        get_network_data(connection, &dataset, player1, player2)
+            .expect("Error communicating with SQLite")
+            .map(|(adv, var)| (false, adv, var))
+            .unwrap_or_else(|| {
+                let metadata = get_metadata(connection, &dataset)
+                    .expect("Error communicating with SQLite")
+                    .unwrap_or_else(|| error("Dataset not found", 1));
+                let (adv, var) = hypothetical_advantage(
                     connection,
                     &dataset,
                     player1,
                     player2,
-                    metadata.set_limit,
-                    metadata.decay_rate,
-                    metadata.adj_decay_rate,
+                    metadata.decay_const,
                 )
-                .expect("Error communicating with SQLite"),
-            )
-        });
+                .expect("Error communicating with SQLite");
+                (true, adv, var)
+            });
 
-    let probability = 1.0
-        / (1.0
-            + f64::exp(
-                g_func((deviation1 * deviation1 + deviation2 * deviation2).sqrt()) * advantage,
-            ));
+    let probability = 1.0 / (1.0 + f64::exp(-advantage));
 
     let (color, other_color) = ansi_num_color(advantage, 0.2, 2.0);
 
     let len1 = prefix1.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name1.len();
     let len2 = prefix2.as_deref().map(|s| s.len() + 1).unwrap_or(0) + name2.len();
+
+    // Prefix + name for each player
 
     if let Some(pre) = prefix1 {
         print!("\x1b[2m{}\x1b[22m ", pre);
@@ -698,26 +612,30 @@ fn player_matchup(
         discrim2, name2
     );
 
+    // Probability breakdown
+
     println!(
         "\x1b[1m\x1b[{4}m{0:>2$}\x1b[0m - \x1b[1m\x1b[{5}m{1:<3$}\x1b[0m",
-        format!("{:.1}%", probability * 100.0),
         format!("{:.1}%", (1.0 - probability) * 100.0),
+        format!("{:.1}%", probability * 100.0),
         len1,
         len2,
         other_color,
         color
     );
 
-    if hypothetical {
-        println!(
-            "\n\x1b[1mHypothetical Advantage: \x1b[{1}m{0:+.4}\x1b[0m",
-            advantage, color
-        );
-    } else {
-        println!(
-            "\n\x1b[1mAdvantage: \x1b[{1}m{0:+.4}\x1b[0m",
-            advantage, color
-        );
+    // Advantage + variance
+
+    println!(
+        "\n\x1b[1m{0}Advantage: \x1b[{1}m{2:+.4}\x1b[39m\n{0}Variance: {3:.4}\x1b[0m",
+        if hypothetical { "Hypothetical " } else { "" },
+        color,
+        advantage,
+        variance
+    );
+
+    if !hypothetical {
+        // Set count
 
         let (a, b) = get_matchup_set_counts(connection, &dataset, player1, player2)
             .expect("Error communicating with SQLite");
@@ -777,5 +695,70 @@ fn sync(connection: &Connection, auth: String, datasets: Vec<String>, all: bool)
 }
 
 fn ranking_create(connection: &Connection, dataset: Option<String>) {
+    use std::collections::HashMap;
+
     let dataset = dataset.unwrap_or_else(|| String::from("default"));
+
+    let metadata = get_metadata(connection, &dataset)
+        .expect("Error communicating with SQLite")
+        .unwrap_or_else(|| error("Dataset not found", 1));
+
+    let exp = read_string().parse::<f64>().unwrap();
+
+    let players = get_all_players(connection, &dataset).expect("Error communicating with SQLite");
+    let num_players = players.len();
+    let mut table = players
+        .into_iter()
+        .map(|id| (id, 1.0 / num_players as f64))
+        .collect::<HashMap<_, _>>();
+    table.shrink_to_fit();
+
+    let mut diff: f64 = 1.0;
+    let mut iter = 0;
+
+    while diff > 1e-8 {
+        let mut new_table = HashMap::with_capacity(table.capacity());
+
+        for (&id, &last) in table.iter() {
+            let mut points = get_edges(connection, &dataset, id)
+                .expect("Error communicating with SQLite")
+                .into_iter()
+                .map(|(other, adv, _sets)| (other, exp.powf(adv)))
+                .collect::<Vec<_>>();
+
+            points.push((id, 1.0));
+
+            let sum_points = points.iter().map(|(_, val)| val).sum::<f64>();
+
+            points.into_iter().for_each(|(other, pts)| {
+                let pts_ = last * pts / sum_points;
+                new_table
+                    .entry(other)
+                    .and_modify(|v| *v += pts_)
+                    .or_insert(pts_);
+            })
+        }
+
+        if iter % 10 == 0 {
+            diff = (table
+                .iter()
+                .map(|(id, &last)| (new_table[id] - last) * (new_table[id] - last))
+                .sum::<f64>()
+                / num_players as f64)
+                .sqrt();
+            println!("{}", diff);
+        }
+
+        table = new_table;
+        iter += 1;
+    }
+
+    let mut list = table.into_iter().collect::<Vec<_>>();
+    list.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+
+    println!();
+    for (id, pts) in list.into_iter().take(20) {
+        let player = get_player(connection, id).unwrap();
+        println!("{} - {}", player.name, pts);
+    }
 }

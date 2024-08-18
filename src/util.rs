@@ -8,6 +8,7 @@ use crate::queries::{PlayerData, PlayerId, Timestamp};
 pub const SECS_IN_HR: u64 = 3600;
 pub const SECS_IN_DAY: u64 = SECS_IN_HR * 24;
 pub const SECS_IN_WEEK: u64 = SECS_IN_DAY * 7;
+pub const SECS_IN_YEAR: u64 = SECS_IN_DAY * 365 + SECS_IN_HR * 6;
 
 pub fn error(msg: &str, code: i32) -> ! {
     eprintln!("\nERROR: {}", msg);

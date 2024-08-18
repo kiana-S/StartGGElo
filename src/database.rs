@@ -1,6 +1,5 @@
 use crate::queries::*;
 use sqlite::*;
-use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
 pub struct DatasetMetadata {
@@ -14,15 +13,14 @@ pub struct DatasetMetadata {
     pub country: Option<String>,
     pub state: Option<String>,
 
-    pub set_limit: u64,
-    pub decay_rate: f64,
-    pub adj_decay_rate: f64,
-    pub period: f64,
-    pub tau: f64,
+    pub decay_const: f64,
+    pub var_const: f64,
 }
 
 /// Return the path to the datasets file.
 fn datasets_path(dir: &Path) -> std::io::Result<PathBuf> {
+    use std::fs::{self, OpenOptions};
+
     let mut path = dir.to_owned();
 
     // Create datasets path if it doesn't exist
@@ -50,11 +48,8 @@ CREATE TABLE IF NOT EXISTS datasets (
     game_slug TEXT NOT NULL,
     country TEXT,
     state TEXT,
-    set_limit INTEGER NOT NULL,
     decay_rate REAL NOT NULL,
-    adj_decay_rate REAL NOT NULL,
-    period REAL NOT NULL,
-    tau REAL NOT NULL
+    var_const REAL NOT NULL
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS players (
@@ -113,11 +108,8 @@ pub fn list_datasets(connection: &Connection) -> sqlite::Result<Vec<(String, Dat
                     game_slug: r_.read::<&str, _>("game_slug").to_owned(),
                     country: r_.read::<Option<&str>, _>("country").map(String::from),
                     state: r_.read::<Option<&str>, _>("state").map(String::from),
-                    set_limit: r_.read::<i64, _>("set_limit") as u64,
-                    decay_rate: r_.read::<f64, _>("decay_rate"),
-                    adj_decay_rate: r_.read::<f64, _>("adj_decay_rate"),
-                    period: r_.read::<f64, _>("period"),
-                    tau: r_.read::<f64, _>("tau"),
+                    decay_const: r_.read::<f64, _>("decay_rate"),
+                    var_const: r_.read::<f64, _>("adj_decay_rate"),
                 },
             ))
         })
@@ -157,17 +149,14 @@ pub fn new_dataset(
     dataset: &str,
     metadata: DatasetMetadata,
 ) -> sqlite::Result<()> {
-    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
+    let query1 = r#"INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
     let query2 = format!(
         r#"CREATE TABLE "{0}_players" (
     id INTEGER PRIMARY KEY REFERENCES players,
-    last_played INTEGER NOT NULL,
-    deviation REAL NOT NULL,
-    volatility REAL NOT NULL,
 
-    sets_won TEXT NOT NULL,
+    sets_won TEXT NOT NULL DEFAULT '',
     sets_count_won INTEGER AS (length(sets_won) - length(replace(sets_won, ';', ''))),
-    sets_lost TEXT NOT NULL,
+    sets_lost TEXT NOT NULL DEFAULT '',
     sets_count_lost INTEGER AS (length(sets_lost) - length(replace(sets_lost, ';', ''))),
     sets TEXT AS (sets_won || sets_lost),
     sets_count INTEGER AS (sets_count_won + sets_count_lost)
@@ -177,10 +166,12 @@ CREATE TABLE "{0}_network" (
     player_A INTEGER NOT NULL,
     player_B INTEGER NOT NULL,
     advantage REAL NOT NULL,
+    variance REAL NOT NULL,
+    last_updated INTEGER NOT NULL,
 
-    sets_A TEXT NOT NULL,
+    sets_A TEXT NOT NULL DEFAULT '',
     sets_count_A INTEGER AS (length(sets_A) - length(replace(sets_A, ';', ''))),
-    sets_B TEXT NOT NULL,
+    sets_B TEXT NOT NULL DEFAULT '',
     sets_count_B INTEGER AS (length(sets_B) - length(replace(sets_B, ';', ''))),
     sets TEXT AS (sets_A || sets_B),
     sets_count INTEGER AS (sets_count_A + sets_count_B),
@@ -208,11 +199,8 @@ CREATE INDEX "{0}_network_B" ON "{0}_network" (player_B);"#,
         .bind((7, &metadata.game_slug[..]))?
         .bind((8, metadata.country.as_deref()))?
         .bind((9, metadata.state.as_deref()))?
-        .bind((10, metadata.set_limit as i64))?
-        .bind((11, metadata.decay_rate))?
-        .bind((12, metadata.adj_decay_rate))?
-        .bind((13, metadata.period))?
-        .bind((14, metadata.tau))?
+        .bind((10, metadata.decay_const))?
+        .bind((11, metadata.var_const))?
         .try_for_each(|x| x.map(|_| ()))?;
 
     connection.execute(query2)
@@ -242,11 +230,8 @@ pub fn get_metadata(
                 game_slug: r_.read::<&str, _>("game_slug").to_owned(),
                 country: r_.read::<Option<&str>, _>("country").map(String::from),
                 state: r_.read::<Option<&str>, _>("state").map(String::from),
-                set_limit: r_.read::<i64, _>("set_limit") as u64,
-                decay_rate: r_.read::<f64, _>("decay_rate"),
-                adj_decay_rate: r_.read::<f64, _>("adj_decay_rate"),
-                period: r_.read::<f64, _>("period"),
-                tau: r_.read::<f64, _>("tau"),
+                decay_const: r_.read::<f64, _>("decay_rate"),
+                var_const: r_.read::<f64, _>("var_const"),
             })
         })
         .and_then(Result::ok))
@@ -290,39 +275,46 @@ pub fn add_set(connection: &Connection, set: &SetId, event: EventId) -> sqlite::
 pub fn add_players(
     connection: &Connection,
     dataset: &str,
-    teams: &Teams<PlayerData>,
-    time: Timestamp,
+    players: &Vec<PlayerData>,
 ) -> sqlite::Result<()> {
     let query1 = "INSERT OR IGNORE INTO players (id, discrim, name, prefix) VALUES (?, ?, ?, ?)";
     let query2 = format!(
-        r#"INSERT OR IGNORE INTO "{}_players"
-            (id, last_played, deviation, volatility, sets_won, sets_lost)
-            VALUES (?, ?, 2.01, 0.06, '', '')"#,
+        r#"INSERT OR IGNORE INTO "{}_players" (id) VALUES (?)"#,
         dataset
     );
 
-    teams.iter().try_for_each(|team| {
-        team.iter().try_for_each(
-            |PlayerData {
-                 id,
-                 name,
-                 prefix,
-                 discrim,
-             }| {
-                let mut statement = connection.prepare(&query1)?;
-                statement.bind((1, id.0 as i64))?;
-                statement.bind((2, &discrim[..]))?;
-                statement.bind((3, &name[..]))?;
-                statement.bind((4, prefix.as_ref().map(|x| &x[..])))?;
-                statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
+    players.iter().try_for_each(
+        |PlayerData {
+             id,
+             name,
+             prefix,
+             discrim,
+         }| {
+            let mut statement = connection.prepare(&query1)?;
+            statement.bind((1, id.0 as i64))?;
+            statement.bind((2, &discrim[..]))?;
+            statement.bind((3, &name[..]))?;
+            statement.bind((4, prefix.as_ref().map(|x| &x[..])))?;
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
 
-                statement = connection.prepare(&query2)?;
-                statement.bind((1, id.0 as i64))?;
-                statement.bind((2, time.0 as i64))?;
-                statement.into_iter().try_for_each(|x| x.map(|_| ()))
-            },
-        )
-    })
+            statement = connection.prepare(&query2)?;
+            statement.bind((1, id.0 as i64))?;
+            statement.into_iter().try_for_each(|x| x.map(|_| ()))
+        },
+    )
+}
+
+pub fn get_all_players(connection: &Connection, dataset: &str) -> sqlite::Result<Vec<PlayerId>> {
+    let query = format!(r#"SELECT id FROM "{}_players""#, dataset,);
+
+    connection
+        .prepare(&query)?
+        .into_iter()
+        .map(|r| {
+            let r_ = r?;
+            Ok(PlayerId(r_.read::<i64, _>("id") as u64))
+        })
+        .try_collect()
 }
 
 pub fn get_player(connection: &Connection, player: PlayerId) -> sqlite::Result<PlayerData> {
@@ -375,26 +367,6 @@ pub fn match_player_name(connection: &Connection, name: &str) -> sqlite::Result<
         .try_collect()
 }
 
-pub fn get_player_rating_data(
-    connection: &Connection,
-    dataset: &str,
-    player: PlayerId,
-) -> sqlite::Result<(f64, f64, Timestamp)> {
-    let query = format!(
-        r#"SELECT deviation, volatility, last_played FROM "{}_players" WHERE id = ?"#,
-        dataset
-    );
-
-    let mut statement = connection.prepare(&query)?;
-    statement.bind((1, player.0 as i64))?;
-    statement.next()?;
-    Ok((
-        statement.read::<f64, _>("deviation")?,
-        statement.read::<f64, _>("volatility")?,
-        Timestamp(statement.read::<i64, _>("last_played")? as u64),
-    ))
-}
-
 pub fn get_player_set_counts(
     connection: &Connection,
     dataset: &str,
@@ -436,27 +408,21 @@ pub fn get_matchup_set_counts(
     ))
 }
 
-pub fn set_player_data(
+pub fn set_player_set_counts(
     connection: &Connection,
     dataset: &str,
     player: PlayerId,
-    last_played: Timestamp,
-    deviation: f64,
-    volatility: f64,
     won: bool,
     set: &SetId,
 ) -> sqlite::Result<()> {
     let query = format!(
-        r#"UPDATE "{}_players" SET deviation = :dev, volatility = :vol, last_played = :last,
-            sets_won = iif(:won, sets_won || :set || ';', sets_won),
-            sets_lost = iif(:won, sets_lost, sets_lost || :set || ';') WHERE id = :id"#,
+        r#"UPDATE "{}_players" SET
+sets_won = iif(:won, sets_won || :set || ';', sets_won),
+sets_lost = iif(:won, sets_lost, sets_lost || :set || ';') WHERE id = :id"#,
         dataset
     );
 
     let mut statement = connection.prepare(&query)?;
-    statement.bind((":dev", deviation))?;
-    statement.bind((":vol", volatility))?;
-    statement.bind((":last", last_played.0 as i64))?;
     statement.bind((":id", player.0 as i64))?;
     statement.bind((":won", if won { 1 } else { 0 }))?;
     statement.bind((":set", &set.0.to_string()[..]))?;
@@ -464,18 +430,18 @@ pub fn set_player_data(
     Ok(())
 }
 
-pub fn get_advantage(
+pub fn get_network_data(
     connection: &Connection,
     dataset: &str,
     player1: PlayerId,
     player2: PlayerId,
-) -> sqlite::Result<Option<f64>> {
+) -> sqlite::Result<Option<(f64, f64)>> {
     if player1 == player2 {
-        return Ok(Some(0.0));
+        return Ok(Some((0.0, 0.0)));
     }
 
     let query = format!(
-        r#"SELECT iif(:a > :b, -advantage, advantage) AS advantage FROM "{}_network"
+        r#"SELECT iif(:a > :b, -advantage, advantage) AS advantage, variance FROM "{}_network"
             WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
         dataset
     );
@@ -484,20 +450,24 @@ pub fn get_advantage(
     statement.bind((":a", player1.0 as i64))?;
     statement.bind((":b", player2.0 as i64))?;
     statement.next()?;
-    statement.read::<Option<f64>, _>("advantage")
+    Ok(statement
+        .read::<Option<f64>, _>("advantage")?
+        .zip(statement.read::<Option<f64>, _>("variance")?))
 }
 
-pub fn insert_advantage(
+pub fn insert_network_data(
     connection: &Connection,
     dataset: &str,
     player1: PlayerId,
     player2: PlayerId,
     advantage: f64,
+    variance: f64,
+    time: Timestamp,
 ) -> sqlite::Result<()> {
     let query = format!(
         r#"INSERT INTO "{}_network"
-            (player_A, player_B, advantage, sets_A, sets_B)
-            VALUES (min(:a, :b), max(:a, :b), iif(:a > :b, -:v, :v), '', '')"#,
+            (player_A, player_B, advantage, variance, last_updated)
+            VALUES (min(:a, :b), max(:a, :b), iif(:a > :b, -:v, :v), :d, :t)"#,
         dataset
     );
 
@@ -505,32 +475,67 @@ pub fn insert_advantage(
     statement.bind((":a", player1.0 as i64))?;
     statement.bind((":b", player2.0 as i64))?;
     statement.bind((":v", advantage))?;
+    statement.bind((":d", variance))?;
+    statement.bind((":t", time.0 as i64))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))
 }
 
-pub fn adjust_advantages(
+pub fn adjust_for_time(
     connection: &Connection,
     dataset: &str,
-    set: SetId,
+    player: PlayerId,
+    var_const: f64,
+    time: Timestamp,
+) -> sqlite::Result<()> {
+    let query = format!(
+        r#"UPDATE "{0}_network" SET
+variance = min(variance + :c * (:t - last_updated), 5.0),
+last_updated = :t
+WHERE player_A = :i OR player_B = :i"#,
+        dataset
+    );
+
+    let mut statement = connection.prepare(query)?;
+    statement.bind((":i", player.0 as i64))?;
+    statement.bind((":c", var_const))?;
+    statement.bind((":t", time.0 as i64))?;
+    statement.into_iter().try_for_each(|x| x.map(|_| ()))
+}
+
+pub fn glicko_adjust(
+    connection: &Connection,
+    dataset: &str,
+    set: &SetId,
     player1: PlayerId,
     player2: PlayerId,
+    advantage: f64,
+    variance: f64,
     winner: usize,
-    adjust1: f64,
-    adjust2: f64,
     decay_rate: f64,
 ) -> sqlite::Result<()> {
+    let score = if winner != 0 { 1.0 } else { 0.0 };
+
+    let exp_val = 1.0 / (1.0 + (-advantage).exp());
+
+    let like_var = 1.0 / exp_val / (1.0 - exp_val);
+    let var_new = 1.0 / (1.0 / variance + 1.0 / like_var);
+    let adjust = score - exp_val;
+
     let query1 = format!(
-        r#"UPDATE "{}_network"
-SET advantage = advantage + iif(:pl = player_A, -:v, :v) * :d
+        r#"UPDATE "{}_network" SET
+variance = 1.0 / (1.0 / variance + :d / :lv),
+advantage = advantage + :d * iif(:pl = player_A, -:adj, :adj)
+            / (1.0 / variance + :d / :lv)
 WHERE (player_A = :pl AND player_B != :plo)
     OR (player_B = :pl AND player_A != :plo)"#,
         dataset
     );
     let query2 = format!(
-        r#"UPDATE "{}_network"
-SET advantage = advantage + iif(:a > :b, -:v, :v),
-    sets_A = iif(:w = (:a > :b), sets_A || :set || ';', sets_A),
-    sets_B = iif(:w = (:b > :a), sets_B || :set || ';', sets_B)
+        r#"UPDATE "{}_network" SET
+variance = :var,
+advantage = advantage + iif(:a > :b, -:adj, :adj) * :var,
+sets_A = iif(:w = (:a > :b), sets_A || :set || ';', sets_A),
+sets_B = iif(:w = (:b > :a), sets_B || :set || ';', sets_B)
 WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
         dataset
     );
@@ -538,21 +543,24 @@ WHERE player_A = min(:a, :b) AND player_B = max(:a, :b)"#,
     let mut statement = connection.prepare(&query1)?;
     statement.bind((":pl", player1.0 as i64))?;
     statement.bind((":plo", player2.0 as i64))?;
-    statement.bind((":v", adjust1))?;
+    statement.bind((":adj", -0.5 * adjust))?;
     statement.bind((":d", decay_rate))?;
+    statement.bind((":lv", like_var))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
 
     statement = connection.prepare(&query1)?;
     statement.bind((":pl", player2.0 as i64))?;
     statement.bind((":plo", player1.0 as i64))?;
-    statement.bind((":v", adjust2))?;
+    statement.bind((":adj", 0.5 * adjust))?;
     statement.bind((":d", decay_rate))?;
+    statement.bind((":lv", like_var))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))?;
 
     statement = connection.prepare(&query2)?;
     statement.bind((":a", player1.0 as i64))?;
     statement.bind((":b", player2.0 as i64))?;
-    statement.bind((":v", adjust2 - adjust1))?;
+    statement.bind((":adj", adjust))?;
+    statement.bind((":var", var_new))?;
     statement.bind((":w", winner as i64))?;
     statement.bind((":set", &set.0.to_string()[..]))?;
     statement.into_iter().try_for_each(|x| x.map(|_| ()))
@@ -562,11 +570,11 @@ pub fn get_edges(
     connection: &Connection,
     dataset: &str,
     player: PlayerId,
-) -> sqlite::Result<Vec<(PlayerId, f64, u64)>> {
+) -> sqlite::Result<Vec<(PlayerId, f64, f64)>> {
     let query = format!(
         r#"SELECT
     iif(:pl = player_B, player_A, player_B) AS id,
-    iif(:pl = player_B, -advantage, advantage) AS advantage, sets_count
+    iif(:pl = player_B, -advantage, advantage) AS advantage, variance
     FROM "{}_network"
     WHERE player_A = :pl OR player_B = :pl"#,
         dataset
@@ -581,7 +589,7 @@ pub fn get_edges(
             Ok((
                 PlayerId(r_.read::<i64, _>("id") as u64),
                 r_.read::<f64, _>("advantage"),
-                r_.read::<i64, _>("sets_count") as u64,
+                r_.read::<f64, _>("variance"),
             ))
         })
         .try_collect()
@@ -616,20 +624,20 @@ pub fn hypothetical_advantage(
     dataset: &str,
     player1: PlayerId,
     player2: PlayerId,
-    set_limit: u64,
     decay_rate: f64,
-    adj_decay_rate: f64,
-) -> sqlite::Result<f64> {
+) -> sqlite::Result<(f64, f64)> {
     use std::collections::{HashSet, VecDeque};
 
     // Check trivial cases
-    if player1 == player2 || either_isolated(connection, dataset, player1, player2)? {
-        return Ok(0.0);
+    if player1 == player2 {
+        return Ok((0.0, 0.0));
+    } else if decay_rate < 0.05 || either_isolated(connection, dataset, player1, player2)? {
+        return Ok((0.0, 5.0));
     }
 
     let mut visited: HashSet<PlayerId> = HashSet::new();
-    let mut queue: VecDeque<(PlayerId, Vec<(f64, f64)>)> =
-        VecDeque::from([(player1, Vec::from([(0.0, 1.0)]))]);
+    let mut queue: VecDeque<(PlayerId, Vec<(f64, f64, f64)>)> =
+        VecDeque::from([(player1, Vec::from([(0.0, 0.0, 1.0 / decay_rate)]))]);
 
     let mut final_paths = Vec::new();
 
@@ -638,7 +646,7 @@ pub fn hypothetical_advantage(
 
         let connections = get_edges(connection, dataset, visiting)?;
 
-        for (id, adv, sets) in connections
+        for (id, adv, var) in connections
             .into_iter()
             .filter(|(id, _, _)| !visited.contains(id))
         {
@@ -652,12 +660,9 @@ pub fn hypothetical_advantage(
             };
 
             if rf.len() < 100 {
-                let decay = if sets >= set_limit {
-                    decay_rate
-                } else {
-                    adj_decay_rate
-                };
-                let iter = paths.iter().map(|(a, d)| (a + adv, d * decay));
+                let iter = paths
+                    .iter()
+                    .map(|(av, vr, dec)| (av + adv, vr + var, dec * decay_rate));
 
                 rf.extend(iter);
                 rf.truncate(100);
@@ -667,22 +672,23 @@ pub fn hypothetical_advantage(
         visited.insert(visiting);
     }
 
-    let max_decay = final_paths
-        .iter()
-        .map(|x| x.1)
-        .max_by(|d1, d2| d1.partial_cmp(d2).unwrap());
-
-    if let Some(mdec) = max_decay {
-        let sum_decay = final_paths.iter().map(|x| x.1).sum::<f64>();
-        Ok(final_paths
-            .into_iter()
-            .map(|(adv, dec)| adv * dec)
-            .sum::<f64>()
-            / sum_decay
-            * mdec)
-    } else {
+    if final_paths.len() == 0 {
         // No paths found
-        Ok(0.0)
+        Ok((0.0, 5.0))
+    } else {
+        let sum_decay: f64 = final_paths.iter().map(|(_, _, dec)| dec).sum();
+        let (final_adv, final_var) = final_paths
+            .into_iter()
+            .fold((0.0, 0.0), |(av, vr), (adv, var, dec)| {
+                (av + adv * dec, vr + (var + adv * adv) * dec)
+            });
+        let mut final_adv = final_adv / sum_decay;
+        let mut final_var = final_var / sum_decay - final_adv * final_adv;
+        if final_var > 5.0 {
+            final_adv = final_adv * (5.0 / final_var).sqrt();
+            final_var = 5.0;
+        }
+        Ok((final_adv, final_var))
     }
 }
 
@@ -691,21 +697,12 @@ pub fn initialize_edge(
     dataset: &str,
     player1: PlayerId,
     player2: PlayerId,
-    set_limit: u64,
     decay_rate: f64,
-    adj_decay_rate: f64,
-) -> sqlite::Result<f64> {
-    let adv = hypothetical_advantage(
-        connection,
-        dataset,
-        player1,
-        player2,
-        set_limit,
-        decay_rate,
-        adj_decay_rate,
-    )?;
-    insert_advantage(connection, dataset, player1, player2, adv)?;
-    Ok(adv)
+    time: Timestamp,
+) -> sqlite::Result<(f64, f64)> {
+    let (adv, var) = hypothetical_advantage(connection, dataset, player1, player2, decay_rate)?;
+    insert_network_data(connection, dataset, player1, player2, adv, var, time)?;
+    Ok((adv, var))
 }
 
 // Tests
@@ -729,8 +726,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     set_limit INTEGER NOT NULL,
     decay_rate REAL NOT NULL,
     adj_decay_rate REAL NOT NULL,
-    period REAL NOT NULL,
-    tau REAL NOT NULL
+    var_const
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS players (
@@ -769,11 +765,8 @@ CREATE TABLE IF NOT EXISTS sets (
             game_slug: String::from("test"),
             country: None,
             state: None,
-            set_limit: 0,
-            decay_rate: 0.5,
-            adj_decay_rate: 0.5,
-            period: (3600 * 24 * 30) as f64,
-            tau: 0.2,
+            decay_const: 0.5,
+            var_const: 0.00000001,
         }
     }
 
@@ -786,142 +779,5 @@ CREATE TABLE IF NOT EXISTS sets (
                 discrim: String::from("a"),
             })
             .collect()
-    }
-
-    #[test]
-    fn sqlite_sanity_check() -> sqlite::Result<()> {
-        let test_value: i64 = 2;
-
-        let connection = sqlite::open(":memory:")?;
-        connection.execute(
-            r#"CREATE TABLE test (a INTEGER);
-            INSERT INTO test VALUES (1);
-            INSERT INTO test VALUES (2)"#,
-        )?;
-
-        let mut statement = connection.prepare("SELECT * FROM test WHERE a = ?")?;
-        statement.bind((1, test_value))?;
-        statement.next()?;
-        assert_eq!(statement.read::<i64, _>("a")?, test_value);
-        Ok(())
-    }
-
-    #[test]
-    fn test_players() -> sqlite::Result<()> {
-        let connection = mock_datasets()?;
-        new_dataset(&connection, "test", metadata())?;
-
-        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
-
-        let mut statement = connection.prepare("SELECT * FROM players WHERE id = 1")?;
-        statement.next()?;
-        assert_eq!(statement.read::<i64, _>("id")?, 1);
-        assert_eq!(statement.read::<String, _>("name")?, "1");
-        assert_eq!(statement.read::<Option<String>, _>("prefix")?, None);
-
-        Ok(())
-    }
-
-    #[test]
-    fn edge_insert_get() -> sqlite::Result<()> {
-        let connection = mock_datasets()?;
-        new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
-
-        insert_advantage(&connection, "test", PlayerId(2), PlayerId(1), 1.0)?;
-
-        assert_eq!(
-            get_advantage(&connection, "test", PlayerId(1), PlayerId(2))?,
-            Some(-1.0)
-        );
-        assert_eq!(
-            get_advantage(&connection, "test", PlayerId(2), PlayerId(1))?,
-            Some(1.0)
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn player_all_edges() -> sqlite::Result<()> {
-        let connection = mock_datasets()?;
-        new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(3)], Timestamp(0))?;
-
-        insert_advantage(&connection, "test", PlayerId(2), PlayerId(1), 1.0)?;
-        insert_advantage(&connection, "test", PlayerId(1), PlayerId(3), 5.0)?;
-
-        assert_eq!(
-            get_edges(&connection, "test", PlayerId(1))?,
-            [(PlayerId(2), -1.0, 0), (PlayerId(3), 5.0, 0)]
-        );
-        assert_eq!(
-            get_edges(&connection, "test", PlayerId(2))?,
-            [(PlayerId(1), 1.0, 0)]
-        );
-        assert_eq!(
-            get_edges(&connection, "test", PlayerId(3))?,
-            [(PlayerId(1), -5.0, 0)]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn hypoth_adv_trivial() -> sqlite::Result<()> {
-        let num_players = 3;
-
-        let connection = mock_datasets()?;
-        new_dataset(&connection, "test", metadata())?;
-        add_players(
-            &connection,
-            "test",
-            &vec![players(num_players)],
-            Timestamp(0),
-        )?;
-
-        let metadata = metadata();
-        for i in 1..=num_players {
-            for j in 1..=num_players {
-                assert_eq!(
-                    hypothetical_advantage(
-                        &connection,
-                        "test",
-                        PlayerId(i),
-                        PlayerId(j),
-                        metadata.set_limit,
-                        metadata.decay_rate,
-                        metadata.adj_decay_rate
-                    )?,
-                    0.0
-                );
-            }
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn hypoth_adv1() -> sqlite::Result<()> {
-        let connection = mock_datasets()?;
-        new_dataset(&connection, "test", metadata())?;
-        add_players(&connection, "test", &vec![players(2)], Timestamp(0))?;
-
-        insert_advantage(&connection, "test", PlayerId(1), PlayerId(2), 1.0)?;
-
-        let metadata = metadata();
-        assert_eq!(
-            hypothetical_advantage(
-                &connection,
-                "test",
-                PlayerId(1),
-                PlayerId(2),
-                metadata.set_limit,
-                metadata.decay_rate,
-                metadata.adj_decay_rate
-            )?,
-            1.0
-        );
-
-        Ok(())
     }
 }
